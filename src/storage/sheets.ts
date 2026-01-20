@@ -51,7 +51,6 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   const spreadsheetId = config.googleSheetId;
   const fieldsTab = config.sheetTabFields || 'fields';
   const dataTab = config.sheetTabData || 'data';
-  const keyField = config.objectKeyField || 'name';
 
   // Initialize Google Sheets API
   let auth: InstanceType<typeof google.auth.GoogleAuth>;
@@ -181,8 +180,10 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (data.length === 0) return null;
 
       const headers = data[0];
-      const keyColIndex = headers.indexOf(keyField);
-      if (keyColIndex === -1) return null;
+      if (headers.length === 0) return null;
+
+      // First column is always the key
+      const keyColIndex = 0;
 
       // Find row with matching key
       for (let i = 1; i < data.length; i++) {
@@ -203,11 +204,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async addObjectByName(name: string): Promise<void> {
       const headers = await getDataHeaders();
-      const keyColIndex = headers.indexOf(keyField);
-
-      if (keyColIndex === -1) {
-        throw new FillerError('storage_error', `Key field "${keyField}" not found in data sheet`);
+      if (headers.length === 0) {
+        throw new FillerError('storage_error', 'Data sheet has no headers');
       }
+
+      // First column is always the key
+      const keyColIndex = 0;
 
       // Create row with only the key field set
       const row = new Array(headers.length).fill('');
@@ -233,8 +235,10 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (data.length === 0) return;
 
       const headers = data[0];
-      const keyColIndex = headers.indexOf(keyField);
-      if (keyColIndex === -1) return;
+      if (headers.length === 0) return;
+
+      // First column is always the key
+      const keyColIndex = 0;
 
       // Find row index
       let rowIndex = -1;

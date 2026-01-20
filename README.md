@@ -43,7 +43,7 @@ npm run build
 **Sheet structure:**
 
 - `fields` sheet: columns `name`, `description`, `auto`, `instructions`, `type`, `example`
-- `data` sheet: first row is headers (field names), each subsequent row is an object
+- `data` sheet: first row is headers (field names), first column is the object key, each subsequent row is an object
 
 ## Usage
 

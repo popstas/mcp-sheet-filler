@@ -105,3 +105,4 @@ src/
 - Zod schemas in `src/tools/schemas.ts` are used for runtime input validation
 - All validation logic (type checking, emptiness, no-overwrite) is in `src/validation.ts`, adapters only do I/O
 - Google Sheets adapter uses service account auth or Application Default Credentials
+- Sheets adapter uses first column as object key (any column name works)
