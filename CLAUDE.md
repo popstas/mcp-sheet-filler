@@ -72,6 +72,7 @@ Common:
 
 Sheets:
 - `GOOGLE_SHEET_ID`, `SHEET_TAB_DATA` (default: `data`), `SHEET_TAB_FIELDS` (default: `fields`)
+- `GOOGLE_SERVICE_ACCOUNT_KEY` = JSON string or path to service account key file
 
 SQLite:
 - `SQLITE_PATH` = path to DB file
@@ -91,8 +92,8 @@ src/
 ├── validation.ts         # isEmpty, validateType, processSaveValues
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
-│   ├── sqlite.ts         # SQLite adapter (implemented)
-│   └── sheets.ts         # Google Sheets adapter (stub)
+│   ├── sqlite.ts         # SQLite adapter
+│   └── sheets.ts         # Google Sheets adapter
 └── tools/
     ├── index.ts          # Tool handlers
     └── schemas.ts        # Zod schemas for input validation
@@ -103,4 +104,4 @@ src/
 - Tool handlers are in `src/tools/index.ts`, JSON schemas for MCP are defined inline in `src/index.ts`
 - Zod schemas in `src/tools/schemas.ts` are used for runtime input validation
 - All validation logic (type checking, emptiness, no-overwrite) is in `src/validation.ts`, adapters only do I/O
-- Google Sheets adapter is a stub that throws `backend_not_configured`
+- Google Sheets adapter uses service account auth or Application Default Credentials

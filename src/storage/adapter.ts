@@ -19,6 +19,7 @@ export interface StorageConfig {
   googleSheetId?: string;
   sheetTabData?: string;
   sheetTabFields?: string;
+  googleServiceAccountKey?: string; // JSON string or path to file
   // SQLite config
   sqlitePath?: string;
 }
@@ -33,6 +34,7 @@ export function getConfigFromEnv(): StorageConfig {
     googleSheetId: process.env.GOOGLE_SHEET_ID,
     sheetTabData: process.env.SHEET_TAB_DATA || 'data',
     sheetTabFields: process.env.SHEET_TAB_FIELDS || 'fields',
+    googleServiceAccountKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
     // SQLite
     sqlitePath: process.env.SQLITE_PATH || 'data.db',
   };

@@ -31,6 +31,19 @@ npm run build
 | `GOOGLE_SHEET_ID` | Google Sheet ID | — |
 | `SHEET_TAB_DATA` | Data sheet name | `data` |
 | `SHEET_TAB_FIELDS` | Fields schema sheet name | `fields` |
+| `GOOGLE_SERVICE_ACCOUNT_KEY` | Service account JSON (string or file path) | — |
+
+### Google Sheets Setup
+
+1. Create a Google Cloud project and enable the Google Sheets API
+2. Create a service account and download the JSON key
+3. Share your Google Sheet with the service account email (with Editor access)
+4. Set `GOOGLE_SERVICE_ACCOUNT_KEY` to the JSON content or file path
+
+**Sheet structure:**
+
+- `fields` sheet: columns `name`, `description`, `auto`, `instructions`, `type`, `example`
+- `data` sheet: first row is headers (field names), each subsequent row is an object
 
 ## Usage
 
