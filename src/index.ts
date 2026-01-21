@@ -2,115 +2,65 @@
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { z } from 'zod';
 
 import { getConfigFromEnv, type StorageAdapter } from './storage/adapter.js';
 import { FillerError } from './types.js';
 import { handlers, type ToolName } from './tools/index.js';
 import { logger } from './logger.js';
+import {
+  getFieldsByNamesSchema,
+  addFieldSchema,
+  listFieldsSchema,
+  getObjectSchema,
+  getObjectByNameSchema,
+  addObjectByNameSchema,
+  saveObjectNoOverwriteSchema,
+  getMissingAutoFieldsSchema,
+  getNextMissingFieldsObjectSchema,
+} from './tools/schemas.js';
 
-const TOOL_DEFINITIONS: Record<ToolName, { description: string; inputSchema: Record<string, unknown> }> = {
+type ToolDefinition = {
+  description: string;
+  inputSchema: z.ZodObject<z.ZodRawShape>;
+};
+
+const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_get_fields_by_names: {
     description: 'Get field metadata by list of names',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        names: { type: 'array', items: { type: 'string' }, description: 'List of field names to retrieve' },
-        include_instructions: { type: 'boolean', description: 'Include instructions in response' },
-      },
-      required: ['names'],
-    },
+    inputSchema: getFieldsByNamesSchema,
   },
   filler_add_field: {
     description: 'Add a new field to the schema',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        field: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', description: 'Unique field name' },
-            description: { type: 'string', description: 'Field description' },
-            auto: { type: 'boolean', description: 'Auto-fill flag' },
-            instructions: { type: 'string', description: 'Instructions for auto-filling' },
-            type: { type: 'string', description: 'Data type (string, number, date, etc.)' },
-            example: { type: 'string', description: 'Example value' },
-          },
-          required: ['name'],
-        },
-      },
-      required: ['field'],
-    },
+    inputSchema: addFieldSchema,
   },
   filler_list_fields: {
     description: 'List all fields or a subset by names',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        names: { type: 'array', items: { type: 'string' }, description: 'Optional list of field names to filter' },
-        include_instructions: { type: 'boolean', description: 'Include instructions in response' },
-      },
-    },
+    inputSchema: listFieldsSchema,
   },
   filler_get_object: {
     description: 'Get an object by its identifier',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Object identifier (key field value)' },
-      },
-      required: ['id'],
-    },
+    inputSchema: getObjectSchema,
   },
   filler_get_object_by_name: {
     description: 'Get an object by its name (key field)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Object name (key field value)' },
-      },
-      required: ['name'],
-    },
+    inputSchema: getObjectByNameSchema,
   },
   filler_add_object_by_name: {
     description: 'Create a new object with the given name',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Name for the new object' },
-      },
-      required: ['name'],
-    },
+    inputSchema: addObjectByNameSchema,
   },
   filler_save_object_no_overwrite: {
     description: 'Save field values without overwriting existing non-empty values',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Object name' },
-        values: { type: 'object', additionalProperties: { type: 'string' }, description: 'Field values to save' },
-      },
-      required: ['name', 'values'],
-    },
+    inputSchema: saveObjectNoOverwriteSchema,
   },
   filler_get_missing_auto_fields: {
     description: 'Get list of auto-fill fields that are empty for an object',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Object name' },
-        include_field_meta: { type: 'boolean', description: 'Include field metadata in response' },
-      },
-      required: ['name'],
-    },
+    inputSchema: getMissingAutoFieldsSchema,
   },
   filler_get_next_missing_fields_object: {
     description: 'Get the first object that has missing auto-fill fields',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        include_field_meta: { type: 'boolean', description: 'Include field metadata in response' },
-      },
-    },
+    inputSchema: getNextMissingFieldsObjectSchema,
   },
 };
 
@@ -139,19 +89,21 @@ async function main() {
     version: '1.0.0',
   });
 
-  // Register all tools
+  // Register all tools using registerTool with Zod schemas
   for (const [name, handler] of Object.entries(handlers)) {
     const toolName = name as ToolName;
     const def = TOOL_DEFINITIONS[toolName];
 
-    server.tool(
+    server.registerTool(
       toolName,
-      def.description,
-      def.inputSchema,
-      async (args: Record<string, unknown>) => {
+      {
+        description: def.description,
+        inputSchema: def.inputSchema,
+      },
+      async (args) => {
         logger.info(`tool_call: ${toolName}`, { args });
         try {
-          const result = await handler(args, adapter);
+          const result = await handler(args as Record<string, unknown>, adapter);
           logger.debug(`tool_result: ${toolName}`, { result });
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
