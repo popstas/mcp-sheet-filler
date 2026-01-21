@@ -6,6 +6,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { getConfigFromEnv, type StorageAdapter } from './storage/adapter.js';
 import { FillerError } from './types.js';
 import { handlers, type ToolName } from './tools/index.js';
+import { logger } from './logger.js';
 
 const TOOL_DEFINITIONS: Record<ToolName, { description: string; inputSchema: Record<string, unknown> }> = {
   filler_get_fields_by_names: {
@@ -115,12 +116,15 @@ const TOOL_DEFINITIONS: Record<ToolName, { description: string; inputSchema: Rec
 
 async function createAdapter(): Promise<StorageAdapter> {
   const config = getConfigFromEnv();
+  logger.info('adapter_config', { backend: config.backend, objectKeyField: config.objectKeyField });
 
   if (config.backend === 'sqlite') {
     const { createSqliteAdapter } = await import('./storage/sqlite.js');
+    logger.info('adapter_created', { backend: 'sqlite', path: config.sqlitePath });
     return createSqliteAdapter(config.sqlitePath!, config.objectKeyField);
   } else if (config.backend === 'sheets') {
     const { createSheetsAdapter } = await import('./storage/sheets.js');
+    logger.info('adapter_created', { backend: 'sheets', sheetId: config.googleSheetId });
     return createSheetsAdapter(config);
   }
 
@@ -145,18 +149,25 @@ async function main() {
       def.description,
       def.inputSchema,
       async (args: Record<string, unknown>) => {
+        logger.info(`tool_call: ${toolName}`, { args });
         try {
           const result = await handler(args, adapter);
+          logger.debug(`tool_result: ${toolName}`, { result });
           return {
             content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
           };
         } catch (error) {
           if (error instanceof FillerError) {
+            logger.error(`tool_error: ${toolName}`, { error: error.toJSON(), args });
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: error.toJSON() }) }],
               isError: true,
             };
           }
+          logger.error(`tool_unexpected_error: ${toolName}`, {
+            error: error instanceof Error ? error.message : String(error),
+            args,
+          });
           throw error;
         }
       }
@@ -166,10 +177,12 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
+  logger.info('server_started', { tools: Object.keys(handlers) });
   console.error('mcp-sheet-filler server started');
 }
 
 main().catch((error) => {
+  logger.error('fatal_error', { error: error instanceof Error ? error.message : String(error) });
   console.error('Fatal error:', error);
   process.exit(1);
 });

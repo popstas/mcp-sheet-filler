@@ -70,6 +70,7 @@ Save statuses: `saved`, `skipped_already_set`, `rejected_unknown_field`, `reject
 Common:
 - `STORAGE_BACKEND` = `sheets` | `sqlite`
 - `OBJECT_KEY_FIELD` = key field name (default: `name`)
+- `DEBUG_LOG` = path to debug log file (if set, logs all events and errors)
 
 Sheets:
 - `GOOGLE_SHEET_ID`, `SHEET_TAB_DATA` (default: `data`), `SHEET_TAB_FIELDS` (default: `fields`)
@@ -91,6 +92,7 @@ src/
 ├── index.ts              # MCP server entry point, tool registration
 ├── types.ts              # Field, DataObject, SaveStatus, FillerError
 ├── validation.ts         # isEmpty, validateType, processSaveValues
+├── logger.ts             # Debug logging (writes to DEBUG_LOG path if set)
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
 │   ├── sqlite.ts         # SQLite adapter
