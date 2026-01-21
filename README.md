@@ -189,6 +189,16 @@ Get empty auto-fill fields for an object.
 { "name": "Acme Corp", "include_field_meta": true }
 ```
 
+### filler_get_next_missing_fields_object
+
+Get the first object that has missing auto-fill fields.
+
+```json
+{ "include_field_meta": true }
+```
+
+Returns `{ found, object, missing }` — use this to process objects one by one.
+
 ## Workflow Example
 
 1. Agent calls `filler_list_fields` to understand the schema

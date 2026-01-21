@@ -102,6 +102,15 @@ const TOOL_DEFINITIONS: Record<ToolName, { description: string; inputSchema: Rec
       required: ['name'],
     },
   },
+  filler_get_next_missing_fields_object: {
+    description: 'Get the first object that has missing auto-fill fields',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        include_field_meta: { type: 'boolean', description: 'Include field metadata in response' },
+      },
+    },
+  },
 };
 
 async function createAdapter(): Promise<StorageAdapter> {

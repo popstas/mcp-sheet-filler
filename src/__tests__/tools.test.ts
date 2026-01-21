@@ -285,4 +285,57 @@ describe('Tool Handlers', () => {
       ).rejects.toThrow(FillerError);
     });
   });
+
+  describe('filler_get_next_missing_fields_object', () => {
+    it('returns first object with missing auto fields', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.updateObjectFields('obj1', { email: 'obj1@test.com', website: 'https://obj1.com' });
+      await adapter.addObjectByName('obj2');
+      await adapter.updateObjectFields('obj2', { email: 'obj2@test.com' }); // website missing
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(true);
+      expect(result.object?.name).toBe('obj2');
+      expect(result.missing).toHaveLength(1);
+      expect(result.missing?.[0].name).toBe('website');
+    });
+
+    it('returns found=false when no objects have missing auto fields', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.updateObjectFields('obj1', { email: 'obj1@test.com', website: 'https://obj1.com' });
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(false);
+      expect(result.object).toBeUndefined();
+    });
+
+    it('returns found=false when no objects exist', async () => {
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(false);
+    });
+
+    it('includes field metadata by default', async () => {
+      await adapter.addObjectByName('obj1');
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(true);
+      expect(result.missing?.[0].instructions).toBeDefined();
+    });
+
+    it('excludes field metadata when include_field_meta is false', async () => {
+      await adapter.addObjectByName('obj1');
+
+      const result = await handlers.filler_get_next_missing_fields_object(
+        { include_field_meta: false },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.missing?.[0]).toEqual({ name: 'email' });
+    });
+  });
 });

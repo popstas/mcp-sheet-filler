@@ -53,6 +53,7 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 5. `filler_add_object_by_name` - create object with just the key
 6. `filler_save_object_no_overwrite` - save values without overwriting non-empty fields
 7. `filler_get_missing_auto_fields` - get empty auto-fill fields for an object
+8. `filler_get_next_missing_fields_object` - get first object with missing auto-fill fields
 
 ### Type Validation
 

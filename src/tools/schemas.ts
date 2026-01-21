@@ -56,3 +56,11 @@ export const getMissingAutoFieldsSchema = z.object({
     .default(true)
     .describe('Include field metadata in response'),
 });
+
+export const getNextMissingFieldsObjectSchema = z.object({
+  include_field_meta: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Include field metadata in response'),
+});

@@ -11,6 +11,7 @@ import {
   addObjectByNameSchema,
   saveObjectNoOverwriteSchema,
   getMissingAutoFieldsSchema,
+  getNextMissingFieldsObjectSchema,
 } from './schemas.js';
 
 type ToolHandler<T, R> = (args: T, adapter: StorageAdapter) => Promise<R>;
@@ -122,6 +123,52 @@ export const handlers = {
   }) as ToolHandler<
     unknown,
     { missing: Array<{ name: string; type?: string; example?: string; instructions?: string }> }
+  >,
+
+  filler_get_next_missing_fields_object: (async (args, adapter) => {
+    const { include_field_meta } = getNextMissingFieldsObjectSchema.parse(args);
+
+    const fields = await adapter.listFields();
+    const autoFields = fields.filter((f) => f.auto === true);
+
+    if (autoFields.length === 0) {
+      return { found: false };
+    }
+
+    const objects = await adapter.listObjects();
+
+    for (const obj of objects) {
+      const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
+
+      if (missingFields.length > 0) {
+        const missing = missingFields.map((f) => {
+          if (include_field_meta) {
+            return {
+              name: f.name,
+              type: f.type,
+              example: f.example,
+              instructions: f.instructions,
+            };
+          }
+          return { name: f.name };
+        });
+
+        return {
+          found: true,
+          object: obj,
+          missing,
+        };
+      }
+    }
+
+    return { found: false };
+  }) as ToolHandler<
+    unknown,
+    {
+      found: boolean;
+      object?: { name: string; values: Record<string, string> };
+      missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+    }
   >,
 };
 

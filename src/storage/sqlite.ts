@@ -92,6 +92,17 @@ export function createSqliteAdapter(dbPath: string, objectKeyField: string): Sto
       };
     },
 
+    async listObjects(): Promise<DataObject[]> {
+      const rows = db.prepare('SELECT * FROM objects').all() as Array<{
+        name: string;
+        data_json: string;
+      }>;
+      return rows.map((row) => ({
+        name: row.name,
+        values: JSON.parse(row.data_json),
+      }));
+    },
+
     async addObjectByName(name: string): Promise<void> {
       db.prepare('INSERT INTO objects (name, data_json) VALUES (?, ?)').run(name, '{}');
     },

@@ -202,6 +202,31 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       return null;
     },
 
+    async listObjects(): Promise<DataObject[]> {
+      const data = await getSheetData(dataTab);
+      if (data.length <= 1) return []; // No data rows, only headers
+
+      const headers = data[0];
+      if (headers.length === 0) return [];
+
+      const objects: DataObject[] = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const name = row[0]; // First column is the key
+        if (!name) continue;
+
+        const values: Record<string, string> = {};
+        for (let j = 0; j < headers.length; j++) {
+          if (headers[j] && row[j] !== undefined && row[j] !== '') {
+            values[headers[j]] = row[j];
+          }
+        }
+        objects.push({ name, values });
+      }
+
+      return objects;
+    },
+
     async addObjectByName(name: string): Promise<void> {
       const headers = await getDataHeaders();
       if (headers.length === 0) {

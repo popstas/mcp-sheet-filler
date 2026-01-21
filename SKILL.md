@@ -103,9 +103,31 @@ Get list of auto-fill fields that are empty for an object.
 
 **Output:** `{ missing: Array<{ name, type?, example?, instructions? }> }`
 
+### filler_get_next_missing_fields_object
+
+Get the first object that has missing auto-fill fields.
+
+| Input | Type | Description |
+|-------|------|-------------|
+| `include_field_meta` | `boolean` | Include field metadata (default: true) |
+
+**Output:** `{ found: boolean, object?: { name, values }, missing?: Array<{ name, type?, example?, instructions? }> }`
+
 ## Workflow
 
-### 1. Understand the Schema
+### Quick Start: Process Next Object
+
+Use `filler_get_next_missing_fields_object` to find the next object needing work:
+
+```
+filler_get_next_missing_fields_object()
+```
+
+This returns the first object with missing auto fields, along with what needs to be filled. If `found: false`, all objects are complete.
+
+### Manual Workflow
+
+#### 1. Understand the Schema
 
 First, get the field definitions to understand what data to collect:
 
@@ -119,7 +141,7 @@ Fields with `auto: true` are candidates for auto-filling. Each field has:
 - `instructions` - how to collect this value
 - `example` - example value
 
-### 2. Get an Object
+#### 2. Get an Object
 
 Retrieve the object you need to fill:
 
@@ -127,7 +149,7 @@ Retrieve the object you need to fill:
 filler_get_object_by_name({ name: "Acme Corp" })
 ```
 
-### 3. Find Missing Auto Fields
+#### 3. Find Missing Auto Fields
 
 Get the list of empty auto-fill fields for this object:
 
@@ -137,7 +159,7 @@ filler_get_missing_auto_fields({ name: "Acme Corp" })
 
 This returns only `auto: true` fields that are currently empty, with their instructions.
 
-### 4. Collect Values
+#### 4. Collect Values
 
 For each missing field, follow the `instructions` to collect the value. Ensure values match the field `type`:
 
@@ -152,7 +174,7 @@ For each missing field, follow the `instructions` to collect the value. Ensure v
 | `json` | Valid JSON string |
 | `enum:a\|b\|c` | One of the listed values |
 
-### 5. Save Values
+#### 5. Save Values
 
 Save collected values (won't overwrite existing data):
 
@@ -172,7 +194,7 @@ Check the result for each field:
 - `rejected_unknown_field` - field not in schema
 - `rejected_invalid_type` - value failed type validation
 
-### 6. Repeat
+#### 6. Repeat
 
 Continue with step 3 until no missing auto fields remain.
 

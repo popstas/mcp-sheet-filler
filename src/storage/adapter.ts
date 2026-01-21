@@ -5,6 +5,7 @@ export interface StorageAdapter {
   getFieldsByNames(names: string[]): Promise<Field[]>;
   addField(field: Field): Promise<void>;
   getObjectByName(name: string): Promise<DataObject | null>;
+  listObjects(): Promise<DataObject[]>;
   addObjectByName(name: string): Promise<void>;
   updateObjectFields(name: string, values: Record<string, string>): Promise<void>;
   getFieldNames(): Promise<string[]>;
