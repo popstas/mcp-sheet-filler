@@ -276,17 +276,29 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       if (rowIndex === -1) return;
 
+      // Get field types to convert numbers properly
+      const fields = await adapter.listFields();
+      const fieldTypeMap = new Map(fields.map((f) => [f.name, f.type]));
+
       // Update each field
-      const updateData: { range: string; values: string[][] }[] = [];
+      const updateData: { range: string; values: (string | number)[][] }[] = [];
 
       for (const [fieldName, value] of Object.entries(values)) {
         const colIndex = headers.indexOf(fieldName);
         if (colIndex === -1) continue;
 
         const colLetter = columnIndexToLetter(colIndex);
+        const fieldType = fieldTypeMap.get(fieldName);
+
+        // Convert number fields to actual numbers
+        let cellValue: string | number = value;
+        if (fieldType === 'number' && value !== '' && !isNaN(Number(value))) {
+          cellValue = Number(value);
+        }
+
         updateData.push({
           range: `${dataTab}!${colLetter}${rowIndex}`,
-          values: [[value]],
+          values: [[cellValue]],
         });
       }
 
