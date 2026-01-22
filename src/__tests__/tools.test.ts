@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { handlers } from '../tools/index.js';
 import { createSqliteAdapter } from '../storage/sqlite.js';
+import { extractSheetIdFromUrl } from '../storage/sheets.js';
 import type { StorageAdapter } from '../storage/adapter.js';
 import { FillerError } from '../types.js';
 import fs from 'fs';
@@ -337,5 +338,86 @@ describe('Tool Handlers', () => {
       expect(result.found).toBe(true);
       expect(result.missing?.[0]).toEqual({ name: 'email' });
     });
+  });
+
+  describe('filler_use_sheet_id', () => {
+    it('throws error when backend does not support setSheetId', async () => {
+      // SQLite adapter doesn't have setSheetId
+      await expect(
+        handlers.filler_use_sheet_id({ sheet_id: 'test-id' }, adapter)
+      ).rejects.toThrow(FillerError);
+
+      try {
+        await handlers.filler_use_sheet_id({ sheet_id: 'test-id' }, adapter);
+      } catch (error) {
+        expect((error as FillerError).code).toBe('backend_not_configured');
+        expect((error as FillerError).message).toContain('sheets backend');
+      }
+    });
+
+    it('works with adapter that has setSheetId', async () => {
+      // Create a mock adapter with setSheetId/getSheetId
+      let currentSheetId = 'initial-id';
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        setSheetId(idOrUrl: string) {
+          currentSheetId = idOrUrl;
+        },
+        getSheetId() {
+          return currentSheetId;
+        },
+      };
+
+      const result = await handlers.filler_use_sheet_id(
+        { sheet_id: 'new-sheet-id' },
+        mockAdapter
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.sheet_id).toBe('new-sheet-id');
+    });
+  });
+});
+
+describe('extractSheetIdFromUrl', () => {
+  it('returns raw sheet ID as-is', () => {
+    const result = extractSheetIdFromUrl('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms');
+    expect(result).toBe('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms');
+  });
+
+  it('extracts ID from full Google Sheets URL', () => {
+    const result = extractSheetIdFromUrl(
+      'https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0'
+    );
+    expect(result).toBe('1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms');
+  });
+
+  it('extracts ID from URL without edit suffix', () => {
+    const result = extractSheetIdFromUrl(
+      'https://docs.google.com/spreadsheets/d/abc123-_xyz/'
+    );
+    expect(result).toBe('abc123-_xyz');
+  });
+
+  it('handles URL with query parameters', () => {
+    const result = extractSheetIdFromUrl(
+      'https://docs.google.com/spreadsheets/d/test_sheet_id/edit?usp=sharing'
+    );
+    expect(result).toBe('test_sheet_id');
+  });
+
+  it('trims whitespace', () => {
+    const result = extractSheetIdFromUrl('  test-id-123  ');
+    expect(result).toBe('test-id-123');
+  });
+
+  it('throws error for empty string', () => {
+    expect(() => extractSheetIdFromUrl('')).toThrow(FillerError);
+    expect(() => extractSheetIdFromUrl('   ')).toThrow(FillerError);
+  });
+
+  it('throws error for invalid URL format', () => {
+    expect(() => extractSheetIdFromUrl('https://google.com/invalid/path')).toThrow(FillerError);
+    expect(() => extractSheetIdFromUrl('/some/local/path')).toThrow(FillerError);
   });
 });

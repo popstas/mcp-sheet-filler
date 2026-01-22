@@ -64,3 +64,7 @@ export const getNextMissingFieldsObjectSchema = z.object({
     .default(true)
     .describe('Include field metadata in response'),
 });
+
+export const useSheetIdSchema = z.object({
+  sheet_id: z.string().describe('Google Sheets ID or full URL'),
+});

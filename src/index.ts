@@ -18,6 +18,7 @@ import {
   saveObjectNoOverwriteSchema,
   getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
+  useSheetIdSchema,
 } from './tools/schemas.js';
 
 type ToolDefinition = {
@@ -61,6 +62,10 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_get_next_missing_fields_object: {
     description: 'Get the first object that has missing auto-fill fields',
     inputSchema: getNextMissingFieldsObjectSchema,
+  },
+  filler_use_sheet_id: {
+    description: 'Switch to a different Google Sheet by ID or URL (sheets backend only)',
+    inputSchema: useSheetIdSchema,
   },
 };
 

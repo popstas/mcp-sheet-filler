@@ -52,6 +52,7 @@ describe('E2E: MCP Server', () => {
         'filler_get_object_by_name',
         'filler_list_fields',
         'filler_save_object_no_overwrite',
+        'filler_use_sheet_id',
       ]);
     });
 
@@ -157,6 +158,16 @@ describe('E2E: MCP Server', () => {
       expect(tool).toBeDefined();
       expect(tool!.description).toBe('Get the first object that has missing auto-fill fields');
       expect(tool!.inputSchema.properties).toHaveProperty('include_field_meta');
+    });
+
+    it('filler_use_sheet_id has correct schema', async () => {
+      const result = await client.listTools();
+      const tool = result.tools.find((t) => t.name === 'filler_use_sheet_id');
+
+      expect(tool).toBeDefined();
+      expect(tool!.description).toBe('Switch to a different Google Sheet by ID or URL (sheets backend only)');
+      expect(tool!.inputSchema.properties).toHaveProperty('sheet_id');
+      expect(tool!.inputSchema.required).toContain('sheet_id');
     });
   });
 });

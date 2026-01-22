@@ -16,6 +16,24 @@ const FIELD_COLUMNS = {
 
 const FIELD_HEADERS = ['name', 'description', 'auto', 'instructions', 'type', 'example'];
 
+// Extract sheet ID from URL or return as-is if already an ID
+export function extractSheetIdFromUrl(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new FillerError('invalid_argument', 'Sheet ID cannot be empty');
+  }
+  // Handle raw ID (no slashes)
+  if (!trimmed.includes('/')) {
+    return trimmed;
+  }
+  // Parse URL: https://docs.google.com/spreadsheets/d/{ID}/...
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match) {
+    return match[1];
+  }
+  throw new FillerError('invalid_argument', 'Invalid Google Sheets URL format');
+}
+
 function parseBoolean(value: string | undefined | null): boolean {
   if (!value) return false;
   const lower = value.toLowerCase().trim();
@@ -44,11 +62,11 @@ function columnIndexToLetter(index: number): string {
 }
 
 export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
-  if (!config.googleSheetId) {
-    throw new FillerError('backend_not_configured', 'GOOGLE_SHEET_ID is required');
-  }
+  // Store spreadsheetId in mutable state for dynamic switching
+  const state = {
+    spreadsheetId: config.googleSheetId || '',
+  };
 
-  const spreadsheetId = config.googleSheetId;
   const fieldsTab = config.sheetTabFields || 'fields';
   const dataTab = config.sheetTabData || 'data';
 
@@ -85,7 +103,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   async function getSheetData(sheetName: string): Promise<string[][]> {
     try {
       const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
+        spreadsheetId: state.spreadsheetId,
         range: sheetName,
       });
       return (response.data.values as string[][]) || [];
@@ -147,7 +165,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       try {
         await sheets.spreadsheets.values.append({
-          spreadsheetId,
+          spreadsheetId: state.spreadsheetId,
           range: `${fieldsTab}!A:F`,
           valueInputOption: 'RAW',
           requestBody: {
@@ -165,7 +183,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         const colIndex = headers.length;
         const colLetter = columnIndexToLetter(colIndex);
         await sheets.spreadsheets.values.update({
-          spreadsheetId,
+          spreadsheetId: state.spreadsheetId,
           range: `${dataTab}!${colLetter}1`,
           valueInputOption: 'RAW',
           requestBody: {
@@ -242,7 +260,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       try {
         await sheets.spreadsheets.values.append({
-          spreadsheetId,
+          spreadsheetId: state.spreadsheetId,
           range: `${dataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
           valueInputOption: 'RAW',
           requestBody: {
@@ -305,7 +323,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (updateData.length > 0) {
         try {
           await sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId,
+            spreadsheetId: state.spreadsheetId,
             requestBody: {
               valueInputOption: 'RAW',
               data: updateData,
@@ -321,6 +339,14 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     async getFieldNames(): Promise<string[]> {
       const fields = await adapter.listFields();
       return fields.map((f) => f.name);
+    },
+
+    setSheetId(idOrUrl: string): void {
+      state.spreadsheetId = extractSheetIdFromUrl(idOrUrl);
+    },
+
+    getSheetId(): string {
+      return state.spreadsheetId;
     },
   };
 

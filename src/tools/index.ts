@@ -12,6 +12,7 @@ import {
   saveObjectNoOverwriteSchema,
   getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
+  useSheetIdSchema,
 } from './schemas.js';
 
 type ToolHandler<T, R> = (args: T, adapter: StorageAdapter) => Promise<R>;
@@ -170,6 +171,24 @@ export const handlers = {
       missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
     }
   >,
+
+  filler_use_sheet_id: (async (args, adapter) => {
+    const { sheet_id } = useSheetIdSchema.parse(args);
+
+    if (!adapter.setSheetId) {
+      throw new FillerError(
+        'backend_not_configured',
+        'filler_use_sheet_id is only available with the sheets backend'
+      );
+    }
+
+    adapter.setSheetId(sheet_id);
+
+    return {
+      success: true,
+      sheet_id: adapter.getSheetId!(),
+    };
+  }) as ToolHandler<unknown, { success: boolean; sheet_id: string }>,
 };
 
 export type ToolName = keyof typeof handlers;

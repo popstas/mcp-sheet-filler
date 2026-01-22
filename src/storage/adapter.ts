@@ -9,6 +9,9 @@ export interface StorageAdapter {
   addObjectByName(name: string): Promise<void>;
   updateObjectFields(name: string, values: Record<string, string>): Promise<void>;
   getFieldNames(): Promise<string[]>;
+  // Optional: only implemented by sheets adapter for dynamic sheet switching
+  setSheetId?(idOrUrl: string): void;
+  getSheetId?(): string;
 }
 
 export type StorageBackend = 'sheets' | 'sqlite';
