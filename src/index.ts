@@ -130,7 +130,6 @@ async function main() {
   await server.connect(transport);
 
   logger.info('server_started', { tools: Object.keys(handlers) });
-  console.error('mcp-sheet-filler server started');
 }
 
 main().catch((error) => {
