@@ -1,0 +1,111 @@
+---
+name: fill-sheet
+description: Use the sheet-filler MCP server to safely auto-fill tabular data.
+---
+
+## Purpose
+
+The sheet-filler server manages objects (rows) with fields (columns). It prevents overwriting existing values, making it safe for incremental data collection.
+
+## Workflow
+
+#### 1. Understand the Schema
+
+First, get the field definitions to understand what data to collect: `filler_list_fields()`.
+
+Fields with `auto: true` are candidates for auto-filling. Each field has:
+- `name` - field identifier
+- `type` - validation type (string, number, date, url, email, json, enum:...)
+- `instructions` - how to collect this value
+- `example` - example value
+
+#### 2. Get an Object
+
+Retrieve the next object you need to fill: `filler_get_next_missing_fields_object()`.
+
+This returns the first object with missing auto fields, along with what needs to be filled. If `found: false`, all objects are complete.
+
+#### 3. Collect Values
+
+For each missing field, follow the `instructions` to collect the value. Ensure values match the field `type`: 
+
+| Type | Format |
+|------|--------|
+| `string` | Any text |
+| `number` | Numeric value |
+| `date` | `YYYY-MM-DD` |
+| `datetime` | ISO-8601 |
+| `url` | Full URL with protocol |
+| `email` | Valid email address |
+| `json` | Valid JSON string |
+| `enum:a\|b\|c` | One of the listed values |
+
+#### 4. Save Values
+
+Save collected values (won't overwrite existing data):
+
+```
+filler_save_object_no_overwrite({
+  name: "Acme Corp",
+  values: {
+    "website": "https://acme.com",
+    "founded": "1990"
+  }
+})
+```
+
+Check the result for each field:
+- `saved` - value was stored
+- `skipped_already_set` - field already has a value (not overwritten)
+- `rejected_unknown_field` - field not in schema
+- `rejected_invalid_type` - value failed type validation
+
+#### 5. Repeat
+
+Continue with step 2 until no missing auto fields remain.
+
+## Creating New Data
+
+### Add a Field
+
+```
+filler_add_field({
+  field: {
+    name: "revenue",
+    description: "Annual revenue",
+    type: "number",
+    auto: true,
+    instructions: "Find the company's annual revenue in USD"
+    example: "1000000"
+  }
+})
+```
+
+### Add an Object
+
+```
+filler_add_object_by_name({ name: "New Company" })
+```
+
+## Example Session
+
+```
+# 1. Check schema
+filler_list_fields()
+→ fields: [name, website (auto), email (auto), founded]
+
+# 2. Get object
+filler_get_next_missing_fields_object()
+→ { found: true, object: { name: "Acme Corp" }, missing: [{ name: "website", type: "url", instructions: "Find official website" }] }
+
+# 3. Collect and save
+filler_save_object_no_overwrite({ name: "Acme Corp", values: { website: "https://acme.com" } })
+→ result: { website: "saved" }
+
+## Key Rules
+
+1. **Never guess values** - only save data you have verified
+2. **Check field types** - ensure values match the expected format before saving
+3. **Trust the no-overwrite** - the server protects existing data, but don't rely on this as a crutch
+4. **Follow instructions** - each field's `instructions` describe how to collect that specific value
+5. **Handle rejections** - if a value is rejected, check the type and fix accordingly
