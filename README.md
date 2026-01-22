@@ -2,6 +2,8 @@
 
 MCP server for storing and safely auto-filling tabular data. Provides tools for an AI agent to read objects, identify empty auto-fill fields, collect values, and write them back — without overwriting existing data.
 
+![demo](assets/demo.gif)
+
 ## Installation
 
 ```bash
