@@ -1,0 +1,40 @@
+# Dependencies
+node_modules
+
+# Build output (will be built in Docker)
+dist
+
+# Development files
+*.log
+.env
+.env.*
+!.env.example
+
+# IDE/Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# Testing
+coverage
+.vitest
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Local data
+*.db
+*.sqlite
+data/
+secrets/

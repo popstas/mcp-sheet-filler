@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  mcp-sheet-filler:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - TRANSPORT=http
+      - PORT=3000
+      - STORAGE_BACKEND=sqlite
+      - SQLITE_PATH=/data/filler.db
+      # Uncomment for Google Sheets backend:
+      # - STORAGE_BACKEND=sheets
+      # - GOOGLE_SHEET_ID=your-sheet-id
+      # - GOOGLE_SERVICE_ACCOUNT_KEY=/secrets/service-account.json
+      # Or for OAuth:
+      # - GOOGLE_OAUTH_CLIENT_ID=your-client-id
+      # - GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
+      # - GOOGLE_OAUTH_TOKEN_PATH=/data/tokens.json
+    volumes:
+      - filler-data:/data
+      # Uncomment to mount service account key:
+      # - ./secrets:/secrets:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  filler-data:

@@ -11,13 +11,57 @@ MCP server that provides tools for storing and safely auto-filling tabular data.
 ```bash
 npm install          # Install dependencies
 npm run build        # Build TypeScript
-npm run dev          # Run in dev mode (tsx)
-npm start            # Start MCP server (built)
+npm run dev          # Run in dev mode (tsx, stdio)
+npm run dev:http     # Run in dev mode (tsx, HTTP)
+npm start            # Start MCP server (stdio)
+npm run start:http   # Start MCP server (HTTP)
 npm run auth         # Run OAuth authentication flow
 npm test             # Run tests in watch mode (vitest)
 npm run test:run     # Run tests once
 npm test -- src/path/to/test.ts  # Run single test file
 ```
+
+## Transport Modes
+
+The server supports two transport modes:
+
+- **stdio** (default) - Standard input/output, for local MCP client integration
+- **http** - Streamable HTTP transport for remote deployment
+
+### HTTP Transport
+
+Set `TRANSPORT=http` to enable HTTP mode. The server exposes:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/mcp` | MCP JSON-RPC endpoint |
+| GET | `/health` | Health check (returns `{"status":"ok"}`) |
+
+Example:
+```bash
+TRANSPORT=http npm run dev
+curl http://localhost:3000/health
+curl -X POST http://localhost:3000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+## Docker
+
+Build and run with Docker:
+
+```bash
+docker build -t mcp-sheet-filler .
+docker run -p 3000:3000 -v filler-data:/data mcp-sheet-filler
+```
+
+Or use docker-compose:
+
+```bash
+docker-compose up -d
+```
+
+The default Docker configuration uses SQLite with data persisted in `/data/filler.db`.
 
 ## Architecture
 
@@ -74,6 +118,9 @@ Common:
 - `STORAGE_BACKEND` = `sheets` | `sqlite`
 - `OBJECT_KEY_FIELD` = key field name (default: `name`)
 - `DEBUG_LOG` = path to debug log file (if set, logs all events and errors)
+- `TRANSPORT` = `stdio` | `http` (default: `stdio`)
+- `PORT` = HTTP server port (default: `3000`)
+- `HOST` = HTTP bind address (default: `0.0.0.0`)
 
 Sheets:
 - `GOOGLE_SHEET_ID`, `SHEET_TAB_DATA` (default: `data`), `SHEET_TAB_FIELDS` (default: `fields`)
@@ -97,7 +144,8 @@ SQLite:
 
 ```
 src/
-├── index.ts              # MCP server entry point, tool registration, CLI mode
+├── index.ts              # Entry point, transport selection, CLI mode
+├── server.ts             # Shared server creation (createAdapter, createServer)
 ├── types.ts              # Field, DataObject, SaveStatus, FillerError
 ├── validation.ts         # isEmpty, validateType, processSaveValues
 ├── logger.ts             # Debug logging (writes to DEBUG_LOG path if set)
@@ -108,6 +156,9 @@ src/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
 │   ├── sqlite.ts         # SQLite adapter
 │   └── sheets.ts         # Google Sheets adapter (supports OAuth and service account)
+├── transport/
+│   ├── stdio.ts          # Stdio transport starter
+│   └── http.ts           # HTTP transport + Express server
 └── tools/
     ├── index.ts          # Tool handlers
     └── schemas.ts        # Zod schemas for input validation
@@ -115,7 +166,7 @@ src/
 
 ## Implementation Notes
 
-- Tool handlers are in `src/tools/index.ts`, JSON schemas for MCP are defined inline in `src/index.ts`
+- Tool handlers are in `src/tools/index.ts`, tool registration with MCP server is in `src/server.ts`
 - Zod schemas in `src/tools/schemas.ts` are used for runtime input validation
 - All validation logic (type checking, emptiness, no-overwrite) is in `src/validation.ts`, adapters only do I/O
 - Sheets adapter uses first column as object key (any column name works)

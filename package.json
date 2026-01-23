@@ -8,7 +8,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
+    "start:http": "TRANSPORT=http node dist/index.js",
     "dev": "tsx src/index.ts",
+    "dev:http": "TRANSPORT=http tsx src/index.ts",
     "auth": "tsx src/index.ts auth",
     "test": "vitest",
     "test:run": "vitest run",
@@ -29,6 +31,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.6",
     "@types/node": "^25.0.9",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
