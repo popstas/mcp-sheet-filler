@@ -68,3 +68,15 @@ export const getNextMissingFieldsObjectSchema = z.object({
 export const useSheetIdSchema = z.object({
   sheet_id: z.string().describe('Google Sheets ID or full URL'),
 });
+
+export const googleAuthSchema = z.object({
+  action: z.enum(['status', 'set_tokens']).describe('Action to perform'),
+  tokens: z
+    .object({
+      access_token: z.string().describe('OAuth access token'),
+      refresh_token: z.string().optional().describe('OAuth refresh token'),
+      expiry_date: z.number().optional().describe('Token expiry timestamp (ms since epoch)'),
+    })
+    .optional()
+    .describe('OAuth tokens (required for set_tokens action)'),
+});

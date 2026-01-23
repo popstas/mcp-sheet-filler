@@ -13,6 +13,7 @@ import {
   getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
+  googleAuthSchema,
 } from './schemas.js';
 
 type ToolHandler<T, R> = (args: T, adapter: StorageAdapter) => Promise<R>;
@@ -189,6 +190,56 @@ export const handlers = {
       sheet_id: adapter.getSheetId!(),
     };
   }) as ToolHandler<unknown, { success: boolean; sheet_id: string }>,
+
+  filler_google_auth: (async (args, adapter) => {
+    const { action, tokens } = googleAuthSchema.parse(args);
+
+    if (!adapter.getAuthStatus) {
+      throw new FillerError(
+        'backend_not_configured',
+        'filler_google_auth is only available with the sheets backend'
+      );
+    }
+
+    if (action === 'status') {
+      const authStatus = adapter.getAuthStatus();
+      return {
+        backend: 'sheets',
+        method: authStatus.method,
+      };
+    }
+
+    // action === 'set_tokens'
+    if (!tokens) {
+      throw new FillerError(
+        'invalid_argument',
+        'tokens are required for set_tokens action'
+      );
+    }
+
+    if (!adapter.setOAuthTokens) {
+      throw new FillerError(
+        'backend_not_configured',
+        'OAuth is not supported by this backend'
+      );
+    }
+
+    adapter.setOAuthTokens({
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      expiry_date: tokens.expiry_date,
+    });
+
+    return {
+      success: true,
+      message: 'OAuth tokens set successfully',
+      auth_method: 'oauth',
+    };
+  }) as ToolHandler<
+    unknown,
+    | { backend: string; method: string }
+    | { success: boolean; message: string; auth_method: string }
+  >,
 };
 
 export type ToolName = keyof typeof handlers;

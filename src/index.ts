@@ -19,6 +19,7 @@ import {
   getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
+  googleAuthSchema,
 } from './tools/schemas.js';
 
 type ToolDefinition = {
@@ -66,6 +67,10 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_use_sheet_id: {
     description: 'Switch to a different Google Sheet by ID or URL (sheets backend only)',
     inputSchema: useSheetIdSchema,
+  },
+  filler_google_auth: {
+    description: 'Check Google authentication status or set OAuth tokens at runtime (sheets backend only)',
+    inputSchema: googleAuthSchema,
   },
 };
 
@@ -137,8 +142,18 @@ async function main() {
   logger.info('server_started', { tools: Object.keys(handlers) });
 }
 
-main().catch((error) => {
-  logger.error('fatal_error', { error: error instanceof Error ? error.message : String(error) });
-  console.error('Fatal error:', error);
-  process.exit(1);
-});
+// Check for CLI mode
+if (process.argv.includes('auth')) {
+  // Run OAuth CLI
+  import('./auth/cli.js').catch((error) => {
+    console.error('Failed to run auth CLI:', error);
+    process.exit(1);
+  });
+} else {
+  // Run MCP server
+  main().catch((error) => {
+    logger.error('fatal_error', { error: error instanceof Error ? error.message : String(error) });
+    console.error('Fatal error:', error);
+    process.exit(1);
+  });
+}

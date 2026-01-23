@@ -13,6 +13,7 @@ npm install          # Install dependencies
 npm run build        # Build TypeScript
 npm run dev          # Run in dev mode (tsx)
 npm start            # Start MCP server (built)
+npm run auth         # Run OAuth authentication flow
 npm test             # Run tests in watch mode (vitest)
 npm run test:run     # Run tests once
 npm test -- src/path/to/test.ts  # Run single test file
@@ -54,6 +55,8 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 6. `filler_save_object_no_overwrite` - save values without overwriting non-empty fields
 7. `filler_get_missing_auto_fields` - get empty auto-fill fields for an object
 8. `filler_get_next_missing_fields_object` - get first object with missing auto-fill fields
+9. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL
+10. `filler_google_auth` - check auth status or set OAuth tokens at runtime
 
 ### Type Validation
 
@@ -76,6 +79,11 @@ Sheets:
 - `GOOGLE_SHEET_ID`, `SHEET_TAB_DATA` (default: `data`), `SHEET_TAB_FIELDS` (default: `fields`)
 - `GOOGLE_SERVICE_ACCOUNT_KEY` = JSON string or path to service account key file
 
+OAuth (alternative to service account):
+- `GOOGLE_OAUTH_CLIENT_ID` = OAuth 2.0 client ID
+- `GOOGLE_OAUTH_CLIENT_SECRET` = OAuth 2.0 client secret
+- `GOOGLE_OAUTH_TOKEN_PATH` = token file path (default: `~/.config/mcp-sheet-filler/tokens.json`)
+
 SQLite:
 - `SQLITE_PATH` = path to DB file
 
@@ -89,14 +97,17 @@ SQLite:
 
 ```
 src/
-├── index.ts              # MCP server entry point, tool registration
+├── index.ts              # MCP server entry point, tool registration, CLI mode
 ├── types.ts              # Field, DataObject, SaveStatus, FillerError
 ├── validation.ts         # isEmpty, validateType, processSaveValues
 ├── logger.ts             # Debug logging (writes to DEBUG_LOG path if set)
+├── auth/
+│   ├── oauth.ts          # OAuth flow implementation (PKCE, token management)
+│   └── cli.ts            # CLI entry point for `npm run auth`
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
 │   ├── sqlite.ts         # SQLite adapter
-│   └── sheets.ts         # Google Sheets adapter
+│   └── sheets.ts         # Google Sheets adapter (supports OAuth and service account)
 └── tools/
     ├── index.ts          # Tool handlers
     └── schemas.ts        # Zod schemas for input validation
@@ -107,5 +118,20 @@ src/
 - Tool handlers are in `src/tools/index.ts`, JSON schemas for MCP are defined inline in `src/index.ts`
 - Zod schemas in `src/tools/schemas.ts` are used for runtime input validation
 - All validation logic (type checking, emptiness, no-overwrite) is in `src/validation.ts`, adapters only do I/O
-- Google Sheets adapter uses service account auth or Application Default Credentials
 - Sheets adapter uses first column as object key (any column name works)
+
+### Google Sheets Authentication
+
+Auth priority (checked in order):
+1. **OAuth tokens** - if token file exists and `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` are set
+2. **Service account** - if `GOOGLE_SERVICE_ACCOUNT_KEY` is set
+3. **Application Default Credentials** - fallback
+
+OAuth flow:
+1. Run `npm run auth` to start the OAuth flow
+2. Browser opens for Google consent
+3. Local server on 127.0.0.1:3000 captures redirect
+4. Tokens saved to `~/.config/mcp-sheet-filler/tokens.json`
+5. MCP server uses tokens automatically on startup
+
+OAuth tokens are automatically refreshed when expired. Uses PKCE (S256) for security.
