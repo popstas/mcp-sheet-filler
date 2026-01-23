@@ -15,6 +15,14 @@ import {
   useSheetIdSchema,
   googleAuthSchema,
 } from './schemas.js';
+import {
+  requestDeviceCode,
+  pollForTokens,
+  saveTokens,
+  getDefaultTokenPath,
+  loadTokens,
+} from '../auth/oauth.js';
+import { getConfigFromEnv } from '../storage/adapter.js';
 
 type ToolHandler<T, R> = (args: T, adapter: StorageAdapter) => Promise<R>;
 
@@ -192,53 +200,80 @@ export const handlers = {
   }) as ToolHandler<unknown, { success: boolean; sheet_id: string }>,
 
   filler_google_auth: (async (args, adapter) => {
-    const { action, tokens } = googleAuthSchema.parse(args);
-
-    if (!adapter.getAuthStatus) {
-      throw new FillerError(
-        'backend_not_configured',
-        'filler_google_auth is only available with the sheets backend'
-      );
-    }
+    const { action, device_code } = googleAuthSchema.parse(args);
+    const config = getConfigFromEnv();
 
     if (action === 'status') {
-      const authStatus = adapter.getAuthStatus();
+      // Check if tokens exist
+      const tokenPath = config.googleOAuthTokenPath || getDefaultTokenPath();
+      const tokens = loadTokens(tokenPath);
+
+      if (tokens && tokens.access_token) {
+        return { status: 'Authenticated to Google Sheets' };
+      }
+
+      // Check if using service account
+      if (config.googleServiceAccountKey) {
+        return { status: 'Authenticated to Google Sheets (service account)' };
+      }
+
+      return { status: 'Not authenticated. Use start_auth to begin authentication.' };
+    }
+
+    if (action === 'start_auth') {
+      if (!config.googleOAuthClientId) {
+        throw new FillerError(
+          'backend_not_configured',
+          'GOOGLE_OAUTH_CLIENT_ID environment variable is required for OAuth authentication'
+        );
+      }
+
+      const deviceCodeResponse = await requestDeviceCode(config.googleOAuthClientId);
+
       return {
-        backend: 'sheets',
-        method: authStatus.method,
+        verification_url: deviceCodeResponse.verification_url,
+        user_code: deviceCodeResponse.user_code,
+        device_code: deviceCodeResponse.device_code,
+        expires_in: deviceCodeResponse.expires_in,
+        instructions: `Visit ${deviceCodeResponse.verification_url} and enter code: ${deviceCodeResponse.user_code}`,
       };
     }
 
-    // action === 'set_tokens'
-    if (!tokens) {
+    // action === 'complete_auth'
+    if (!device_code) {
       throw new FillerError(
         'invalid_argument',
-        'tokens are required for set_tokens action'
+        'device_code is required for complete_auth action'
       );
     }
 
-    if (!adapter.setOAuthTokens) {
+    if (!config.googleOAuthClientId || !config.googleOAuthClientSecret) {
       throw new FillerError(
         'backend_not_configured',
-        'OAuth is not supported by this backend'
+        'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET environment variables are required'
       );
     }
 
-    adapter.setOAuthTokens({
-      access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
-      expiry_date: tokens.expiry_date,
-    });
+    const tokens = await pollForTokens(
+      config.googleOAuthClientId,
+      config.googleOAuthClientSecret,
+      device_code
+    );
 
-    return {
-      success: true,
-      message: 'OAuth tokens set successfully',
-      auth_method: 'oauth',
-    };
+    // Save tokens to file
+    const tokenPath = config.googleOAuthTokenPath || getDefaultTokenPath();
+    saveTokens(tokens, tokenPath);
+
+    // Update the adapter with new tokens if available
+    if (adapter.setOAuthTokens) {
+      adapter.setOAuthTokens(tokens);
+    }
+
+    return { status: 'Authenticated to Google Sheets' };
   }) as ToolHandler<
     unknown,
-    | { backend: string; method: string }
-    | { success: boolean; message: string; auth_method: string }
+    | { status: string }
+    | { verification_url: string; user_code: string; device_code: string; expires_in: number; instructions: string }
   >,
 };
 

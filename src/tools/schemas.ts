@@ -70,13 +70,9 @@ export const useSheetIdSchema = z.object({
 });
 
 export const googleAuthSchema = z.object({
-  action: z.enum(['status', 'set_tokens']).describe('Action to perform'),
-  tokens: z
-    .object({
-      access_token: z.string().describe('OAuth access token'),
-      refresh_token: z.string().optional().describe('OAuth refresh token'),
-      expiry_date: z.number().optional().describe('Token expiry timestamp (ms since epoch)'),
-    })
+  action: z.enum(['status', 'start_auth', 'complete_auth']).describe('Action to perform'),
+  device_code: z
+    .string()
     .optional()
-    .describe('OAuth tokens (required for set_tokens action)'),
+    .describe('Device code from start_auth (required for complete_auth action)'),
 });

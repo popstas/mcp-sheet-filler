@@ -1,9 +1,6 @@
-import { OAuth2Client, Credentials, CodeChallengeMethod } from 'google-auth-library';
-import * as http from 'http';
-import * as url from 'url';
+import { OAuth2Client, Credentials } from 'google-auth-library';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
 import { logger } from '../logger.js';
 
 export interface OAuthTokens {
@@ -14,15 +11,17 @@ export interface OAuthTokens {
   scope?: string;
 }
 
-export interface OAuthConfig {
-  clientId: string;
-  clientSecret: string;
-  scopes?: string[];
+export interface DeviceCodeResponse {
+  device_code: string;
+  user_code: string;
+  verification_url: string;
+  expires_in: number;
+  interval: number;
 }
 
 const DEFAULT_SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const REDIRECT_PORT = 3000;
-const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/oauth2callback`;
+const DEVICE_CODE_URL = 'https://oauth2.googleapis.com/device/code';
+const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 /**
  * Get the default token file path
@@ -30,28 +29,6 @@ const REDIRECT_URI = `http://127.0.0.1:${REDIRECT_PORT}/oauth2callback`;
 export function getDefaultTokenPath(): string {
   const homeDir = process.env.HOME || process.env.USERPROFILE || '';
   return path.join(homeDir, '.config', 'mcp-sheet-filler', 'tokens.json');
-}
-
-/**
- * Generate PKCE code verifier and challenge
- */
-function generatePKCE(): { codeVerifier: string; codeChallenge: string } {
-  // Generate random 32 bytes and encode as base64url
-  const codeVerifier = crypto.randomBytes(32)
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-
-  // Generate SHA256 hash and encode as base64url
-  const codeChallenge = crypto.createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '');
-
-  return { codeVerifier, codeChallenge };
 }
 
 /**
@@ -101,14 +78,10 @@ export function isTokenExpired(tokens: OAuthTokens): boolean {
 }
 
 /**
- * Create an OAuth2Client with the given config
+ * Create an OAuth2Client
  */
-export function createOAuth2Client(config: OAuthConfig): OAuth2Client {
-  return new OAuth2Client(
-    config.clientId,
-    config.clientSecret,
-    REDIRECT_URI
-  );
+export function createOAuth2Client(clientId: string, clientSecret: string): OAuth2Client {
+  return new OAuth2Client(clientId, clientSecret);
 }
 
 /**
@@ -140,117 +113,107 @@ export async function refreshAccessToken(
 }
 
 /**
- * Run the OAuth flow with loopback server
+ * Request a device code from Google OAuth
  */
-export async function runOAuthFlow(config: OAuthConfig): Promise<OAuthTokens> {
-  const client = createOAuth2Client(config);
-  const scopes = config.scopes || DEFAULT_SCOPES;
-
-  const { codeVerifier, codeChallenge } = generatePKCE();
-
-  // Generate auth URL with PKCE
-  const authUrl = client.generateAuthUrl({
-    access_type: 'offline',
-    scope: scopes,
-    code_challenge_method: CodeChallengeMethod.S256,
-    code_challenge: codeChallenge,
-    prompt: 'consent', // Force consent to get refresh token
+export async function requestDeviceCode(clientId: string): Promise<DeviceCodeResponse> {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    scope: DEFAULT_SCOPES.join(' '),
   });
 
-  return new Promise((resolve, reject) => {
-    // Create local server to receive callback
-    const server = http.createServer(async (req, res) => {
-      try {
-        const parsedUrl = url.parse(req.url || '', true);
-
-        if (parsedUrl.pathname !== '/oauth2callback') {
-          res.writeHead(404);
-          res.end('Not found');
-          return;
-        }
-
-        const code = parsedUrl.query.code as string;
-        const error = parsedUrl.query.error as string;
-
-        if (error) {
-          res.writeHead(400);
-          res.end(`Authentication failed: ${error}`);
-          server.close();
-          reject(new Error(`OAuth error: ${error}`));
-          return;
-        }
-
-        if (!code) {
-          res.writeHead(400);
-          res.end('No authorization code received');
-          server.close();
-          reject(new Error('No authorization code received'));
-          return;
-        }
-
-        // Exchange code for tokens with PKCE verifier
-        const { tokens } = await client.getToken({
-          code,
-          codeVerifier,
-        });
-
-        const oauthTokens: OAuthTokens = {
-          access_token: tokens.access_token!,
-          refresh_token: tokens.refresh_token || undefined,
-          expiry_date: tokens.expiry_date || undefined,
-          token_type: tokens.token_type || undefined,
-          scope: tokens.scope || undefined,
-        };
-
-        // Send success response
-        res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.end(`
-          <html>
-            <body style="font-family: system-ui, sans-serif; padding: 40px; text-align: center;">
-              <h1 style="color: #22c55e;">Authentication Successful!</h1>
-              <p>You can close this window and return to the terminal.</p>
-            </body>
-          </html>
-        `);
-
-        server.close();
-        resolve(oauthTokens);
-      } catch (err) {
-        res.writeHead(500);
-        res.end('Internal server error');
-        server.close();
-        reject(err);
-      }
-    });
-
-    // Bind to loopback only for security
-    server.listen(REDIRECT_PORT, '127.0.0.1', () => {
-      logger.info('oauth_server_started', { port: REDIRECT_PORT });
-      console.log('\nOpening browser for Google authentication...');
-      console.log(`\nIf the browser doesn't open automatically, visit:\n${authUrl}\n`);
-
-      // Try to open browser
-      openBrowser(authUrl).catch(() => {
-        // Silent fail - user can manually open URL
-      });
-    });
-
-    server.on('error', (err) => {
-      reject(new Error(`Failed to start OAuth server: ${err.message}`));
-    });
-
-    // Timeout after 5 minutes
-    setTimeout(() => {
-      server.close();
-      reject(new Error('OAuth flow timed out'));
-    }, 5 * 60 * 1000);
+  const response = await fetch(DEVICE_CODE_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
   });
+
+  if (!response.ok) {
+    const error = await response.text();
+    logger.error('device_code_request_failed', { status: response.status, error });
+    throw new Error(`Failed to request device code: ${error}`);
+  }
+
+  const data = await response.json();
+  logger.info('device_code_requested', { user_code: data.user_code, expires_in: data.expires_in });
+
+  return {
+    device_code: data.device_code,
+    user_code: data.user_code,
+    verification_url: data.verification_url,
+    expires_in: data.expires_in,
+    interval: data.interval || 5,
+  };
 }
 
 /**
- * Open URL in default browser
+ * Poll Google's token endpoint for tokens after user completes device flow
  */
-async function openBrowser(url: string): Promise<void> {
-  const { default: open } = await import('open');
-  await open(url);
+export async function pollForTokens(
+  clientId: string,
+  clientSecret: string,
+  deviceCode: string,
+  maxAttempts: number = 60,
+  intervalMs: number = 5000
+): Promise<OAuthTokens> {
+  const params = new URLSearchParams({
+    client_id: clientId,
+    client_secret: clientSecret,
+    device_code: deviceCode,
+    grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+  });
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params.toString(),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      logger.info('device_code_tokens_received', { expiry_date: data.expires_in });
+      return {
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expiry_date: Date.now() + (data.expires_in * 1000),
+        token_type: data.token_type,
+        scope: data.scope,
+      };
+    }
+
+    // Check for pending authorization
+    if (data.error === 'authorization_pending') {
+      // User hasn't completed authorization yet, wait and retry
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      continue;
+    }
+
+    // Check for slow down request
+    if (data.error === 'slow_down') {
+      intervalMs += 5000; // Increase interval as requested
+      await new Promise(resolve => setTimeout(resolve, intervalMs));
+      continue;
+    }
+
+    // Check for expired code
+    if (data.error === 'expired_token') {
+      throw new Error('Device code expired. Please start authentication again.');
+    }
+
+    // Check for access denied
+    if (data.error === 'access_denied') {
+      throw new Error('Access denied. User declined authorization.');
+    }
+
+    // Other errors
+    logger.error('device_code_poll_failed', { error: data.error, description: data.error_description });
+    throw new Error(data.error_description || data.error || 'Failed to get tokens');
+  }
+
+  throw new Error('Polling timed out. Please try authentication again.');
 }

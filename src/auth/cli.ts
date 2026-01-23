@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { runOAuthFlow, saveTokens, getDefaultTokenPath, loadTokens } from './oauth.js';
+import { requestDeviceCode, pollForTokens, saveTokens, getDefaultTokenPath, loadTokens } from './oauth.js';
 
 async function main() {
   const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
@@ -19,8 +19,7 @@ async function main() {
     console.error('');
     console.error('To create OAuth credentials:');
     console.error('  1. Go to https://console.cloud.google.com/apis/credentials');
-    console.error('  2. Create OAuth 2.0 Client ID (Desktop app type)');
-    console.error('  3. Add http://127.0.0.1:3000/oauth2callback to authorized redirect URIs');
+    console.error('  2. Create OAuth 2.0 Client ID (TV and Limited Input devices type)');
     process.exit(1);
   }
 
@@ -31,14 +30,26 @@ async function main() {
     console.log('Running auth flow will replace existing tokens.\n');
   }
 
-  console.log('Starting OAuth authentication flow...');
+  console.log('Starting OAuth authentication flow (device code)...');
   console.log(`Tokens will be saved to: ${tokenPath}\n`);
 
   try {
-    const tokens = await runOAuthFlow({
+    // Step 1: Request device code
+    const deviceCodeResponse = await requestDeviceCode(clientId);
+
+    console.log('='.repeat(50));
+    console.log(`Visit: ${deviceCodeResponse.verification_url}`);
+    console.log(`Enter code: ${deviceCodeResponse.user_code}`);
+    console.log('='.repeat(50));
+    console.log(`\nCode expires in ${Math.floor(deviceCodeResponse.expires_in / 60)} minutes.`);
+    console.log('Waiting for authorization...\n');
+
+    // Step 2: Poll for tokens
+    const tokens = await pollForTokens(
       clientId,
       clientSecret,
-    });
+      deviceCodeResponse.device_code
+    );
 
     saveTokens(tokens, tokenPath);
 

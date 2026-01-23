@@ -9,6 +9,40 @@ The sheet-filler server manages objects (rows) with fields (columns). It prevent
 
 ## Workflow
 
+### Setup (if needed)
+
+#### Authenticate to Google Sheets
+
+If not authenticated, use the device code flow:
+
+```
+# 1. Check status
+filler_google_auth({ action: "status" })
+→ { status: "Not authenticated. Use start_auth to begin authentication." }
+
+# 2. Start auth
+filler_google_auth({ action: "start_auth" })
+→ { verification_url: "https://www.google.com/device", user_code: "ABCD-EFGH", device_code: "xyz123", instructions: "Visit ... and enter code: ABCD-EFGH" }
+
+# 3. Tell user to visit URL and enter code, wait for confirmation
+
+# 4. Complete auth
+filler_google_auth({ action: "complete_auth", device_code: "xyz123" })
+→ { status: "Authenticated to Google Sheets" }
+```
+
+#### Switch to a Different Sheet
+
+To work with a different Google Sheet:
+
+```
+filler_use_sheet_id({ sheet_id: "1ABC...xyz" })
+# or with full URL:
+filler_use_sheet_id({ sheet_id: "https://docs.google.com/spreadsheets/d/1ABC...xyz/edit" })
+```
+
+### Main Workflow
+
 #### 1. Understand the Schema
 
 First, get the field definitions to understand what data to collect: `filler_list_fields()`.

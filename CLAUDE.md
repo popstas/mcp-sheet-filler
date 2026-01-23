@@ -56,7 +56,7 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 7. `filler_get_missing_auto_fields` - get empty auto-fill fields for an object
 8. `filler_get_next_missing_fields_object` - get first object with missing auto-fill fields
 9. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL
-10. `filler_google_auth` - check auth status or set OAuth tokens at runtime
+10. `filler_google_auth` - authenticate via device code flow (status, start_auth, complete_auth)
 
 ### Type Validation
 
@@ -102,7 +102,7 @@ src/
 ├── validation.ts         # isEmpty, validateType, processSaveValues
 ├── logger.ts             # Debug logging (writes to DEBUG_LOG path if set)
 ├── auth/
-│   ├── oauth.ts          # OAuth flow implementation (PKCE, token management)
+│   ├── oauth.ts          # OAuth device code flow, token management
 │   └── cli.ts            # CLI entry point for `npm run auth`
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
@@ -127,11 +127,17 @@ Auth priority (checked in order):
 2. **Service account** - if `GOOGLE_SERVICE_ACCOUNT_KEY` is set
 3. **Application Default Credentials** - fallback
 
-OAuth flow:
-1. Run `npm run auth` to start the OAuth flow
-2. Browser opens for Google consent
-3. Local server on 127.0.0.1:3000 captures redirect
-4. Tokens saved to `~/.config/mcp-sheet-filler/tokens.json`
-5. MCP server uses tokens automatically on startup
+OAuth device code flow (via MCP tool):
+1. Call `filler_google_auth` with `action: "start_auth"`
+2. Tool returns verification URL and user code
+3. User visits URL on any device, enters code, approves access
+4. Call `filler_google_auth` with `action: "complete_auth"` and `device_code` from step 1
+5. Tokens saved to `~/.config/mcp-sheet-filler/tokens.json`
+6. MCP server uses tokens automatically
 
-OAuth tokens are automatically refreshed when expired. Uses PKCE (S256) for security.
+Alternative CLI flow:
+1. Run `npm run auth` to start the device code flow
+2. Visit the displayed URL and enter the code
+3. Tokens saved after authorization
+
+OAuth tokens are automatically refreshed when expired.

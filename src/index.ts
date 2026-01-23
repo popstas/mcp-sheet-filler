@@ -69,7 +69,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     inputSchema: useSheetIdSchema,
   },
   filler_google_auth: {
-    description: 'Check Google authentication status or set OAuth tokens at runtime (sheets backend only)',
+    description: 'Authenticate to Google Sheets using device code flow. Actions: status (check auth), start_auth (get verification URL/code), complete_auth (finish auth with device_code)',
     inputSchema: googleAuthSchema,
   },
 };
