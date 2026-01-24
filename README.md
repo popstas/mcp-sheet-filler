@@ -19,14 +19,7 @@ npm run build
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `STORAGE_BACKEND` | `sqlite` or `sheets` | `sqlite` |
 | `OBJECT_KEY_FIELD` | Key field name for objects | `name` |
-
-**SQLite:**
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `SQLITE_PATH` | Path to SQLite database file | `data.db` |
 
 **Google Sheets:**
 
@@ -62,8 +55,8 @@ Add to `claude_desktop_config.json`:
       "command": "node",
       "args": ["/path/to/mcp-sheet-filler/dist/index.js"],
       "env": {
-        "STORAGE_BACKEND": "sqlite",
-        "SQLITE_PATH": "/path/to/data.db"
+        "GOOGLE_SHEET_ID": "your-google-sheet-id",
+        "GOOGLE_SERVICE_ACCOUNT_KEY": "/path/to/service-account.json"
       }
     }
   }

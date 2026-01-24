@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MCP server that provides tools for storing and safely auto-filling tabular data. Supports two storage backends: Google Sheets and SQLite. The server prevents overwriting already-filled values.
+MCP server that provides tools for storing and safely auto-filling tabular data using Google Sheets as the storage backend. The server prevents overwriting already-filled values.
 
 ## Development Commands
 
@@ -52,7 +52,11 @@ Build and run with Docker:
 
 ```bash
 docker build -t mcp-sheet-filler .
-docker run -p 3000:3000 -v filler-data:/data mcp-sheet-filler
+docker run -p 3000:3000 \
+  -e GOOGLE_SHEET_ID=your-sheet-id \
+  -e GOOGLE_OAUTH_CLIENT_ID=your-client-id \
+  -e GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret \
+  mcp-sheet-filler
 ```
 
 Or use docker-compose:
@@ -61,17 +65,11 @@ Or use docker-compose:
 docker-compose up -d
 ```
 
-The default Docker configuration uses SQLite with data persisted in `/data/filler.db`.
-
 ## Architecture
 
 ### Storage Layer
 
-Two interchangeable backends configured via `STORAGE_BACKEND` env var:
-- `sheets` - Google Sheets backend
-- `sqlite` - SQLite backend
-
-Both implement the `StorageAdapter` interface:
+Google Sheets backend configured via environment variables. Implements the `StorageAdapter` interface:
 - `listFields(names?: string[]): Field[]`
 - `getFieldsByNames(names: string[]): Field[]`
 - `addField(field: Field): void`
@@ -83,10 +81,10 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 
 ### Data Model
 
-**Fields sheet/table** - metadata about columns:
+**Fields sheet** - metadata about columns:
 - `name` (required, unique), `description`, `auto` (boolean), `instructions`, `type`, `example`
 
-**Data sheet/table** - objects as rows, fields as columns:
+**Data sheet** - objects as rows, fields as columns:
 - Key field configured via `OBJECT_KEY_FIELD` (default: `name`)
 
 ### MCP Tools
@@ -115,24 +113,22 @@ Save statuses: `saved`, `skipped_already_set`, `rejected_unknown_field`, `reject
 ## Environment Variables
 
 Common:
-- `STORAGE_BACKEND` = `sheets` | `sqlite`
 - `OBJECT_KEY_FIELD` = key field name (default: `name`)
 - `DEBUG_LOG` = path to debug log file (if set, logs all events and errors)
 - `TRANSPORT` = `stdio` | `http` (default: `stdio`)
 - `PORT` = HTTP server port (default: `3000`)
 - `HOST` = HTTP bind address (default: `0.0.0.0`)
 
-Sheets:
-- `GOOGLE_SHEET_ID`, `SHEET_TAB_DATA` (default: `data`), `SHEET_TAB_FIELDS` (default: `fields`)
+Google Sheets:
+- `GOOGLE_SHEET_ID` - Google Sheets document ID
+- `SHEET_TAB_DATA` - data tab name (default: `data`)
+- `SHEET_TAB_FIELDS` - fields tab name (default: `fields`)
 - `GOOGLE_SERVICE_ACCOUNT_KEY` = JSON string or path to service account key file
 
 OAuth (alternative to service account):
 - `GOOGLE_OAUTH_CLIENT_ID` = OAuth 2.0 client ID
 - `GOOGLE_OAUTH_CLIENT_SECRET` = OAuth 2.0 client secret
 - `GOOGLE_OAUTH_TOKEN_PATH` = token file path (default: `~/.config/mcp-sheet-filler/tokens.json`)
-
-SQLite:
-- `SQLITE_PATH` = path to DB file
 
 ## Key Invariants
 
@@ -154,7 +150,6 @@ src/
 │   └── cli.ts            # CLI entry point for `npm run auth`
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
-│   ├── sqlite.ts         # SQLite adapter
 │   └── sheets.ts         # Google Sheets adapter (supports OAuth and service account)
 ├── transport/
 │   ├── stdio.ts          # Stdio transport starter

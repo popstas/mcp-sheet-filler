@@ -73,19 +73,11 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
 
 export async function createAdapter(): Promise<StorageAdapter> {
   const config = getConfigFromEnv();
-  logger.info('adapter_config', { backend: config.backend, objectKeyField: config.objectKeyField });
+  logger.info('adapter_config', { objectKeyField: config.objectKeyField });
 
-  if (config.backend === 'sqlite') {
-    const { createSqliteAdapter } = await import('./storage/sqlite.js');
-    logger.info('adapter_created', { backend: 'sqlite', path: config.sqlitePath });
-    return createSqliteAdapter(config.sqlitePath!, config.objectKeyField);
-  } else if (config.backend === 'sheets') {
-    const { createSheetsAdapter } = await import('./storage/sheets.js');
-    logger.info('adapter_created', { backend: 'sheets', sheetId: config.googleSheetId });
-    return createSheetsAdapter(config);
-  }
-
-  throw new FillerError('backend_not_configured', `Unknown backend: ${config.backend}`);
+  const { createSheetsAdapter } = await import('./storage/sheets.js');
+  logger.info('adapter_created', { backend: 'sheets', sheetId: config.googleSheetId });
+  return createSheetsAdapter(config);
 }
 
 export function createServer(adapter: StorageAdapter): McpServer {

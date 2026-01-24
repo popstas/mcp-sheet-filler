@@ -1,29 +1,73 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { handlers } from '../tools/index.js';
-import { createSqliteAdapter } from '../storage/sqlite.js';
 import { extractSheetIdFromUrl } from '../storage/sheets.js';
 import type { StorageAdapter } from '../storage/adapter.js';
+import type { Field, DataObject } from '../types.js';
 import { FillerError } from '../types.js';
-import fs from 'fs';
-import path from 'path';
+
+// In-memory mock adapter for testing
+function createMockAdapter(objectKeyField: string = 'name'): StorageAdapter {
+  let fields: Field[] = [];
+  let objects: Map<string, DataObject> = new Map();
+
+  return {
+    async listFields(names?: string[]): Promise<Field[]> {
+      if (names && names.length > 0) {
+        return fields.filter((f) => names.includes(f.name));
+      }
+      return fields;
+    },
+
+    async getFieldsByNames(names: string[]): Promise<Field[]> {
+      return fields.filter((f) => names.includes(f.name));
+    },
+
+    async addField(field: Field): Promise<void> {
+      if (fields.some((f) => f.name === field.name)) {
+        throw new FillerError('field_already_exists', `Field "${field.name}" already exists`);
+      }
+      fields.push(field);
+    },
+
+    async getObjectByName(name: string): Promise<DataObject | null> {
+      return objects.get(name) || null;
+    },
+
+    async listObjects(): Promise<DataObject[]> {
+      return Array.from(objects.values());
+    },
+
+    async addObjectByName(name: string): Promise<void> {
+      if (objects.has(name)) {
+        throw new FillerError('object_already_exists', `Object "${name}" already exists`);
+      }
+      objects.set(name, { name, values: { [objectKeyField]: name } });
+    },
+
+    async updateObjectFields(name: string, values: Record<string, string>): Promise<void> {
+      const obj = objects.get(name);
+      if (!obj) {
+        throw new FillerError('object_not_found', `Object "${name}" not found`);
+      }
+      obj.values = { ...obj.values, ...values };
+    },
+
+    async getFieldNames(): Promise<string[]> {
+      return fields.map((f) => f.name);
+    },
+  };
+}
 
 describe('Tool Handlers', () => {
-  const testDbPath = path.join(process.cwd(), 'test-tools-' + Date.now() + '.db');
   let adapter: StorageAdapter;
 
   beforeEach(async () => {
-    adapter = createSqliteAdapter(testDbPath, 'name');
+    adapter = createMockAdapter('name');
     // Setup test fields
     await adapter.addField({ name: 'name', type: 'string' });
     await adapter.addField({ name: 'email', type: 'email', auto: true, instructions: 'Find email' });
     await adapter.addField({ name: 'website', type: 'url', auto: true, instructions: 'Find website' });
     await adapter.addField({ name: 'age', type: 'number' });
-  });
-
-  afterEach(() => {
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
   });
 
   describe('filler_list_fields', () => {
@@ -342,7 +386,7 @@ describe('Tool Handlers', () => {
 
   describe('filler_use_sheet_id', () => {
     it('throws error when backend does not support setSheetId', async () => {
-      // SQLite adapter doesn't have setSheetId
+      // Mock adapter doesn't have setSheetId
       await expect(
         handlers.filler_use_sheet_id({ sheet_id: 'test-id' }, adapter)
       ).rejects.toThrow(FillerError);

@@ -1,9 +1,6 @@
 # Stage 1: Build
 FROM node:20-alpine AS builder
 
-# Install build dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
 WORKDIR /app
 
 # Copy package files
@@ -22,9 +19,6 @@ RUN npm run build
 # Stage 2: Production
 FROM node:20-alpine AS production
 
-# Install runtime dependencies for better-sqlite3
-RUN apk add --no-cache python3 make g++
-
 WORKDIR /app
 
 # Copy package files
@@ -32,22 +26,16 @@ COPY package*.json ./
 
 # Install production dependencies only
 RUN npm ci --omit=dev && \
-    # Clean up build tools after native module compilation
-    apk del python3 make g++ && \
     rm -rf /root/.npm /tmp/*
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
 
-# Create directory for SQLite data
-RUN mkdir -p /data
-
 # Environment defaults
 ENV TRANSPORT=http \
     PORT=3000 \
     HOST=0.0.0.0 \
-    STORAGE_BACKEND=sqlite \
-    SQLITE_PATH=/data/filler.db
+    STORAGE_BACKEND=sheets
 
 # Expose port
 EXPOSE 3000

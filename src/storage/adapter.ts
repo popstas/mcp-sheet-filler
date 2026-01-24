@@ -25,10 +25,7 @@ export interface StorageAdapter {
   setOAuthTokens?(tokens: OAuthTokens): void;
 }
 
-export type StorageBackend = 'sheets' | 'sqlite';
-
 export interface StorageConfig {
-  backend: StorageBackend;
   objectKeyField: string;
   // Sheets config
   googleSheetId?: string;
@@ -39,15 +36,10 @@ export interface StorageConfig {
   googleOAuthClientId?: string;
   googleOAuthClientSecret?: string;
   googleOAuthTokenPath?: string; // default: ~/.config/mcp-sheet-filler/tokens.json
-  // SQLite config
-  sqlitePath?: string;
 }
 
 export function getConfigFromEnv(): StorageConfig {
-  const backend = (process.env.STORAGE_BACKEND || 'sqlite') as StorageBackend;
-
   return {
-    backend,
     objectKeyField: process.env.OBJECT_KEY_FIELD || 'name',
     // Sheets
     googleSheetId: process.env.GOOGLE_SHEET_ID,
@@ -58,7 +50,5 @@ export function getConfigFromEnv(): StorageConfig {
     googleOAuthClientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
     googleOAuthClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
     googleOAuthTokenPath: process.env.GOOGLE_OAUTH_TOKEN_PATH,
-    // SQLite
-    sqlitePath: process.env.SQLITE_PATH || 'data.db',
   };
 }

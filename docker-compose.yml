@@ -8,17 +8,17 @@ services:
     environment:
       - TRANSPORT=http
       - PORT=3000
-      - STORAGE_BACKEND=sqlite
-      - SQLITE_PATH=/data/filler.db
-      # Uncomment for Google Sheets backend:
-      # - STORAGE_BACKEND=sheets
-      # - GOOGLE_SHEET_ID=your-sheet-id
+      - STORAGE_BACKEND=sheets
+      # Required for Google Sheets backend:
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      # Option 1: Service account authentication
       # - GOOGLE_SERVICE_ACCOUNT_KEY=/secrets/service-account.json
-      # Or for OAuth:
-      # - GOOGLE_OAUTH_CLIENT_ID=your-client-id
-      # - GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret
-      # - GOOGLE_OAUTH_TOKEN_PATH=/data/tokens.json
+      # Option 2: OAuth authentication
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - GOOGLE_OAUTH_TOKEN_PATH=/data/tokens.json
     volumes:
+      # For OAuth token persistence
       - filler-data:/data
       # Uncomment to mount service account key:
       # - ./secrets:/secrets:ro

@@ -1,13 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import fs from 'fs';
-import path from 'path';
 
-describe('E2E: MCP Server', () => {
+// Skip e2e tests if Google Sheets credentials are not available
+const hasGoogleCredentials =
+  process.env.GOOGLE_SHEET_ID &&
+  (process.env.GOOGLE_SERVICE_ACCOUNT_KEY ||
+    (process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET));
+
+describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
   let client: Client;
   let transport: StdioClientTransport;
-  const testDbPath = path.join(process.cwd(), 'test-e2e-' + Date.now() + '.db');
 
   beforeAll(async () => {
     transport = new StdioClientTransport({
@@ -15,8 +18,7 @@ describe('E2E: MCP Server', () => {
       args: ['tsx', 'src/index.ts'],
       env: {
         ...process.env,
-        STORAGE_BACKEND: 'sqlite',
-        SQLITE_PATH: testDbPath,
+        STORAGE_BACKEND: 'sheets',
         OBJECT_KEY_FIELD: 'name',
       },
       stderr: 'pipe',
@@ -32,9 +34,6 @@ describe('E2E: MCP Server', () => {
 
   afterAll(async () => {
     await transport.close();
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
   });
 
   describe('tools/list', () => {
