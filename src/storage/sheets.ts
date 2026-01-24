@@ -9,9 +9,11 @@ import {
   isTokenExpired,
   refreshAccessToken,
   getDefaultTokenPath,
+  getUserTokenPath,
   type OAuthTokens,
 } from '../auth/oauth.js';
 import { logger } from '../logger.js';
+import { getCurrentUserId, getCurrentAccessToken } from '../context.js';
 import fs from 'fs';
 
 // Field columns in the fields sheet (0-indexed)
@@ -71,8 +73,18 @@ function columnIndexToLetter(index: number): string {
   return letter;
 }
 
+// Per-user OAuth client state
+interface UserAuthState {
+  oauthClient: OAuth2Client;
+  oauthTokens: OAuthTokens;
+  sheets: sheets_v4.Sheets;
+}
+
 export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
-  // Store mutable state for dynamic switching
+  // Per-user OAuth client cache
+  const userAuthCache = new Map<string, UserAuthState>();
+
+  // Store mutable state for dynamic switching (fallback for non-OAuth auth)
   const state: {
     spreadsheetId: string;
     authMethod: AuthMethod;
@@ -94,41 +106,100 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   let sheets: sheets_v4.Sheets;
 
   /**
-   * Initialize auth with priority: OAuth > Service Account > ADC
+   * Create OAuth client for a specific user with token refresh handling
    */
-  function initializeAuth(): void {
-    // Priority 1: OAuth tokens from file
-    const tokens = loadTokens(state.oauthTokenPath);
-    if (tokens && config.googleOAuthClientId && config.googleOAuthClientSecret) {
-      const oauth2Client = new OAuth2Client(
-        config.googleOAuthClientId,
-        config.googleOAuthClientSecret
-      );
-      oauth2Client.setCredentials(tokens);
+  function createUserOAuthClient(userId: string, tokens: OAuthTokens): UserAuthState {
+    const oauth2Client = new OAuth2Client(
+      config.googleOAuthClientId,
+      config.googleOAuthClientSecret
+    );
+    oauth2Client.setCredentials(tokens);
 
-      // Set up token refresh handling
-      oauth2Client.on('tokens', (newTokens) => {
-        logger.info('oauth_tokens_refreshed', { expiry_date: newTokens.expiry_date });
-        const updatedTokens: OAuthTokens = {
-          access_token: newTokens.access_token!,
-          refresh_token: newTokens.refresh_token || state.oauthTokens?.refresh_token,
-          expiry_date: newTokens.expiry_date || undefined,
-          token_type: newTokens.token_type || undefined,
-          scope: newTokens.scope || undefined,
-        };
-        state.oauthTokens = updatedTokens;
-        saveTokens(updatedTokens, state.oauthTokenPath);
-      });
+    const tokenPath = getUserTokenPath(userId);
 
-      state.oauthClient = oauth2Client;
-      state.oauthTokens = tokens;
-      state.authMethod = 'oauth';
-      sheets = google.sheets({ version: 'v4', auth: oauth2Client });
-      logger.info('sheets_auth_initialized', { method: 'oauth' });
-      return;
+    // Set up token refresh handling for this user
+    oauth2Client.on('tokens', (newTokens) => {
+      logger.info('oauth_tokens_refreshed', { userId, expiry_date: newTokens.expiry_date });
+      const cachedState = userAuthCache.get(userId);
+      const updatedTokens: OAuthTokens = {
+        access_token: newTokens.access_token!,
+        refresh_token: newTokens.refresh_token || cachedState?.oauthTokens?.refresh_token,
+        expiry_date: newTokens.expiry_date || undefined,
+        token_type: newTokens.token_type || undefined,
+        scope: newTokens.scope || undefined,
+      };
+      if (cachedState) {
+        cachedState.oauthTokens = updatedTokens;
+      }
+      saveTokens(updatedTokens, tokenPath);
+    });
+
+    const userSheets = google.sheets({ version: 'v4', auth: oauth2Client });
+
+    return {
+      oauthClient: oauth2Client,
+      oauthTokens: tokens,
+      sheets: userSheets,
+    };
+  }
+
+  // Cache for MCP access token-based sheets clients (keyed by token hash)
+  const mcpTokenClientCache = new Map<string, sheets_v4.Sheets>();
+
+  /**
+   * Create a Sheets client using an access token directly (from MCP auth).
+   * This avoids the need for separate filler_google_auth flow.
+   */
+  function createSheetsClientFromToken(accessToken: string): sheets_v4.Sheets {
+    // Simple hash for cache key (first 16 chars of token)
+    const cacheKey = accessToken.slice(0, 16);
+
+    if (mcpTokenClientCache.has(cacheKey)) {
+      return mcpTokenClientCache.get(cacheKey)!;
     }
 
-    // Priority 2: Service account
+    const oauth2Client = new OAuth2Client();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const client = google.sheets({ version: 'v4', auth: oauth2Client });
+
+    mcpTokenClientCache.set(cacheKey, client);
+    logger.debug('sheets_client_from_mcp_token', { cacheKey });
+
+    return client;
+  }
+
+  /**
+   * Get or create OAuth client for current user from context
+   */
+  function getUserAuth(): UserAuthState | null {
+    const userId = getCurrentUserId();
+
+    // Check cache first
+    if (userAuthCache.has(userId)) {
+      return userAuthCache.get(userId)!;
+    }
+
+    // Try to load tokens for this user
+    if (config.googleOAuthClientId && config.googleOAuthClientSecret) {
+      const tokenPath = getUserTokenPath(userId);
+      const tokens = loadTokens(tokenPath);
+
+      if (tokens) {
+        const userAuth = createUserOAuthClient(userId, tokens);
+        userAuthCache.set(userId, userAuth);
+        logger.info('user_oauth_initialized', { userId, method: 'oauth' });
+        return userAuth;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Initialize fallback auth (Service Account or ADC) - not user-specific
+   */
+  function initializeFallbackAuth(): void {
+    // Priority 1: Service account
     if (config.googleServiceAccountKey) {
       let credentials: object;
       // Check if it's a path or JSON string
@@ -152,7 +223,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       return;
     }
 
-    // Priority 3: Application Default Credentials
+    // Priority 2: Application Default Credentials
     const auth = new google.auth.GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
@@ -162,9 +233,63 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   }
 
   /**
-   * Ensure OAuth tokens are refreshed if expired
+   * Get the sheets client for the current request.
+   * Priority:
+   * 1. MCP access token from request context (reused for Sheets API)
+   * 2. User-specific OAuth tokens (from filler_google_auth)
+   * 3. Fallback (service account or ADC)
+   */
+  function getSheetsClient(): sheets_v4.Sheets {
+    // Priority 1: Use MCP access token if available in context
+    const mcpToken = getCurrentAccessToken();
+    if (mcpToken) {
+      return createSheetsClientFromToken(mcpToken);
+    }
+
+    // Priority 2: User-specific OAuth tokens
+    const userAuth = getUserAuth();
+    if (userAuth) {
+      return userAuth.sheets;
+    }
+
+    // Priority 3: Fallback (service account or ADC)
+    return sheets;
+  }
+
+  /**
+   * Ensure OAuth tokens are refreshed if expired for current user.
+   * Skipped when using MCP access token (already validated at HTTP layer).
    */
   async function ensureValidTokens(): Promise<void> {
+    // Skip if using MCP token (already validated)
+    const mcpToken = getCurrentAccessToken();
+    if (mcpToken) {
+      return;
+    }
+
+    const userAuth = getUserAuth();
+
+    if (userAuth) {
+      const userId = getCurrentUserId();
+      if (isTokenExpired(userAuth.oauthTokens)) {
+        logger.info('oauth_tokens_expired', { userId, expiry_date: userAuth.oauthTokens.expiry_date });
+        try {
+          const newTokens = await refreshAccessToken(userAuth.oauthClient, userAuth.oauthTokens);
+          userAuth.oauthTokens = newTokens;
+          userAuth.oauthClient.setCredentials(newTokens);
+          saveTokens(newTokens, getUserTokenPath(userId));
+        } catch (error) {
+          logger.error('oauth_refresh_failed', { userId, error: error instanceof Error ? error.message : String(error) });
+          throw new FillerError(
+            'backend_not_configured',
+            'OAuth token refresh failed. Please re-authenticate using filler_google_auth tool.'
+          );
+        }
+      }
+      return;
+    }
+
+    // Fallback to legacy state-based auth
     if (state.authMethod !== 'oauth' || !state.oauthClient || !state.oauthTokens) {
       return;
     }
@@ -186,14 +311,15 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     }
   }
 
-  // Initialize auth on startup
-  initializeAuth();
+  // Initialize fallback auth on startup (service account or ADC)
+  initializeFallbackAuth();
 
   // Helper to get all rows from a sheet
   async function getSheetData(sheetName: string): Promise<string[][]> {
     await ensureValidTokens();
+    const client = getSheetsClient();
     try {
-      const response = await sheets.spreadsheets.values.get({
+      const response = await client.spreadsheets.values.get({
         spreadsheetId: state.spreadsheetId,
         range: sheetName,
       });
@@ -251,6 +377,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async addField(field: Field): Promise<void> {
       await ensureValidTokens();
+      const client = getSheetsClient();
       logger.debug('sheets_add_field', { name: field.name, type: field.type || 'string' });
       const row = [
         field.name,
@@ -262,7 +389,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       ];
 
       try {
-        await sheets.spreadsheets.values.append({
+        await client.spreadsheets.values.append({
           spreadsheetId: state.spreadsheetId,
           range: `${fieldsTab}!A:F`,
           valueInputOption: 'RAW',
@@ -280,7 +407,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (!headers.includes(field.name)) {
         const colIndex = headers.length;
         const colLetter = columnIndexToLetter(colIndex);
-        await sheets.spreadsheets.values.update({
+        await client.spreadsheets.values.update({
           spreadsheetId: state.spreadsheetId,
           range: `${dataTab}!${colLetter}1`,
           valueInputOption: 'RAW',
@@ -360,6 +487,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async addObjectByName(name: string): Promise<void> {
       await ensureValidTokens();
+      const client = getSheetsClient();
       logger.debug('sheets_add_object_by_name', { name });
       const headers = await getDataHeaders();
       if (headers.length === 0) {
@@ -374,7 +502,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       row[keyColIndex] = name;
 
       try {
-        await sheets.spreadsheets.values.append({
+        await client.spreadsheets.values.append({
           spreadsheetId: state.spreadsheetId,
           range: `${dataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
           valueInputOption: 'RAW',
@@ -390,6 +518,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async updateObjectFields(name: string, values: Record<string, string>): Promise<void> {
       await ensureValidTokens();
+      const client = getSheetsClient();
       logger.debug('sheets_update_object_fields', { name, fields: Object.keys(values) });
       const data = await getSheetData(dataTab);
       if (data.length === 0) return;
@@ -439,7 +568,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       if (updateData.length > 0) {
         try {
-          await sheets.spreadsheets.values.batchUpdate({
+          await client.spreadsheets.values.batchUpdate({
             spreadsheetId: state.spreadsheetId,
             requestBody: {
               valueInputOption: 'RAW',
@@ -467,9 +596,17 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     },
 
     getAuthStatus(): AuthStatus {
-      return {
-        method: state.authMethod,
-      };
+      // Check if using MCP token
+      const mcpToken = getCurrentAccessToken();
+      if (mcpToken) {
+        return { method: 'oauth' };
+      }
+
+      const userAuth = getUserAuth();
+      if (userAuth) {
+        return { method: 'oauth' };
+      }
+      return { method: state.authMethod };
     },
 
     setOAuthTokens(tokens: OAuthTokens): void {
@@ -480,35 +617,17 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         );
       }
 
-      const oauth2Client = new OAuth2Client(
-        config.googleOAuthClientId,
-        config.googleOAuthClientSecret
-      );
-      oauth2Client.setCredentials(tokens);
+      const userId = getCurrentUserId();
+      const tokenPath = getUserTokenPath(userId);
 
-      // Set up token refresh handling
-      oauth2Client.on('tokens', (newTokens) => {
-        logger.info('oauth_tokens_refreshed', { expiry_date: newTokens.expiry_date });
-        const updatedTokens: OAuthTokens = {
-          access_token: newTokens.access_token!,
-          refresh_token: newTokens.refresh_token || state.oauthTokens?.refresh_token,
-          expiry_date: newTokens.expiry_date || undefined,
-          token_type: newTokens.token_type || undefined,
-          scope: newTokens.scope || undefined,
-        };
-        state.oauthTokens = updatedTokens;
-        saveTokens(updatedTokens, state.oauthTokenPath);
-      });
+      // Create and cache user-specific OAuth client
+      const userAuth = createUserOAuthClient(userId, tokens);
+      userAuthCache.set(userId, userAuth);
 
-      state.oauthClient = oauth2Client;
-      state.oauthTokens = tokens;
-      state.authMethod = 'oauth';
-      sheets = google.sheets({ version: 'v4', auth: oauth2Client });
+      // Save tokens to user-specific file
+      saveTokens(tokens, tokenPath);
 
-      // Save tokens to file
-      saveTokens(tokens, state.oauthTokenPath);
-
-      logger.info('oauth_tokens_set_at_runtime', { method: 'oauth' });
+      logger.info('oauth_tokens_set_at_runtime', { userId, method: 'oauth' });
     },
   };
 

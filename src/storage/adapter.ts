@@ -27,6 +27,8 @@ export interface StorageAdapter {
 
 export interface StorageConfig {
   objectKeyField: string;
+  // HTTP transport config
+  resourceUrl?: string; // Public URL of this server (required for HTTP transport)
   // Sheets config
   googleSheetId?: string;
   sheetTabData?: string;
@@ -41,6 +43,8 @@ export interface StorageConfig {
 export function getConfigFromEnv(): StorageConfig {
   return {
     objectKeyField: process.env.OBJECT_KEY_FIELD || 'name',
+    // HTTP transport
+    resourceUrl: process.env.RESOURCE_URL,
     // Sheets
     googleSheetId: process.env.GOOGLE_SHEET_ID,
     sheetTabData: process.env.SHEET_TAB_DATA || 'data',

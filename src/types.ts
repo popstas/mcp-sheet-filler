@@ -25,7 +25,10 @@ export type ErrorCode =
   | 'object_already_exists'
   | 'object_not_found'
   | 'invalid_argument'
-  | 'storage_error';
+  | 'storage_error'
+  | 'unauthorized'
+  | 'invalid_token'
+  | 'insufficient_scope';
 
 export interface AppError {
   code: ErrorCode;

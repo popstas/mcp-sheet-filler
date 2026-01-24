@@ -30,21 +30,37 @@ The server supports two transport modes:
 
 ### HTTP Transport
 
-Set `TRANSPORT=http` to enable HTTP mode. The server exposes:
+Set `TRANSPORT=http` to enable HTTP mode. HTTP transport requires OAuth authentication per the MCP Authorization specification (RFC 9728).
+
+**Required environment variables for HTTP transport:**
+- `RESOURCE_URL` - Public URL of this server
+- `GOOGLE_OAUTH_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_OAUTH_CLIENT_SECRET` - Google OAuth client secret
+
+The server exposes:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/mcp` | MCP JSON-RPC endpoint |
-| GET | `/health` | Health check (returns `{"status":"ok"}`) |
+| POST | `/mcp` | MCP JSON-RPC endpoint (requires auth) |
+| GET | `/mcp` | SSE stream (requires auth) |
+| DELETE | `/mcp` | Session teardown (requires auth) |
+| GET | `/health` | Health check (no auth) |
+| GET | `/.well-known/oauth-protected-resource` | RFC 9728 Protected Resource Metadata (no auth) |
+
+**Authentication:** Requests to `/mcp` must include a valid Google OAuth access token in the `Authorization: Bearer <token>` header. The token must have been issued for the same OAuth client ID as configured on the server.
 
 Example:
 ```bash
-TRANSPORT=http npm run dev
+RESOURCE_URL=https://example.com TRANSPORT=http npm run dev
 curl http://localhost:3000/health
+curl http://localhost:3000/.well-known/oauth-protected-resource
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ya29.xxx" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+**401 Response:** Unauthorized requests receive a 401 with a `WWW-Authenticate` header pointing to the Protected Resource Metadata endpoint.
 
 ## Docker
 
@@ -53,6 +69,7 @@ Build and run with Docker:
 ```bash
 docker build -t mcp-sheet-filler .
 docker run -p 3000:3000 \
+  -e RESOURCE_URL=https://your-server.com \
   -e GOOGLE_SHEET_ID=your-sheet-id \
   -e GOOGLE_OAUTH_CLIENT_ID=your-client-id \
   -e GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret \
@@ -106,7 +123,7 @@ Supported types: `string`, `number`, `date` (ISO), `datetime` (ISO), `url`, `ema
 
 ### Error Codes
 
-`backend_not_configured`, `field_already_exists`, `field_not_found`, `object_already_exists`, `object_not_found`, `invalid_argument`, `storage_error`
+`backend_not_configured`, `field_already_exists`, `field_not_found`, `object_already_exists`, `object_not_found`, `invalid_argument`, `storage_error`, `unauthorized`, `invalid_token`, `insufficient_scope`
 
 Save statuses: `saved`, `skipped_already_set`, `rejected_unknown_field`, `rejected_invalid_type`
 
@@ -118,6 +135,7 @@ Common:
 - `TRANSPORT` = `stdio` | `http` (default: `stdio`)
 - `PORT` = HTTP server port (default: `3000`)
 - `HOST` = HTTP bind address (default: `0.0.0.0`)
+- `RESOURCE_URL` = public URL of this server (required for HTTP transport)
 
 Google Sheets:
 - `GOOGLE_SHEET_ID` - Google Sheets document ID
@@ -145,15 +163,19 @@ src/
 ├── types.ts              # Field, DataObject, SaveStatus, FillerError
 ├── validation.ts         # isEmpty, validateType, processSaveValues
 ├── logger.ts             # Debug logging (writes to DEBUG_LOG path if set)
+├── context.ts            # Request context (AsyncLocalStorage for per-client isolation)
 ├── auth/
+│   ├── cli.ts            # CLI entry point for `npm run auth`
+│   ├── metadata.ts       # RFC 9728 Protected Resource Metadata generation
 │   ├── oauth.ts          # OAuth device code flow, token management
-│   └── cli.ts            # CLI entry point for `npm run auth`
+│   ├── token-validator.ts # Google access token validation
+│   └── types.ts          # Auth-related type definitions
 ├── storage/
 │   ├── adapter.ts        # StorageAdapter interface, config from env
 │   └── sheets.ts         # Google Sheets adapter (supports OAuth and service account)
 ├── transport/
 │   ├── stdio.ts          # Stdio transport starter
-│   └── http.ts           # HTTP transport + Express server
+│   └── http.ts           # HTTP transport + Express server (MCP auth compliant)
 └── tools/
     ├── index.ts          # Tool handlers
     └── schemas.ts        # Zod schemas for input validation
@@ -169,16 +191,31 @@ src/
 ### Google Sheets Authentication
 
 Auth priority (checked in order):
-1. **OAuth tokens** - if token file exists and `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` are set
-2. **Service account** - if `GOOGLE_SERVICE_ACCOUNT_KEY` is set
-3. **Application Default Credentials** - fallback
+1. **MCP access token** - if request includes `Authorization: Bearer` header with Google token (HTTP transport)
+2. **OAuth tokens** - if token file exists and `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` are set
+3. **Service account** - if `GOOGLE_SERVICE_ACCOUNT_KEY` is set
+4. **Application Default Credentials** - fallback
 
-OAuth device code flow (via MCP tool):
+#### Unified Auth (HTTP Transport - Recommended)
+
+When using HTTP transport, the MCP access token is automatically reused for Google Sheets API access. This means:
+- **No separate `filler_google_auth` needed** - one auth, two purposes
+- Client authenticates once with Google (with `spreadsheets` scope)
+- Same token authenticates to MCP server AND accesses Google Sheets
+
+**Requirements:**
+- Token must include `https://www.googleapis.com/auth/spreadsheets` scope
+- Token must be issued for the same OAuth client ID as the server
+
+#### Separate Auth Flow (Optional)
+
+If the MCP token doesn't include Sheets scope, use `filler_google_auth`:
+
 1. Call `filler_google_auth` with `action: "start_auth"`
 2. Tool returns verification URL and user code
 3. User visits URL on any device, enters code, approves access
 4. Call `filler_google_auth` with `action: "complete_auth"` and `device_code` from step 1
-5. Tokens saved to `~/.config/mcp-sheet-filler/tokens.json`
+5. Tokens saved to user-specific file (see Multi-Tenancy below)
 6. MCP server uses tokens automatically
 
 Alternative CLI flow:
@@ -187,3 +224,54 @@ Alternative CLI flow:
 3. Tokens saved after authorization
 
 OAuth tokens are automatically refreshed when expired.
+
+### Multi-Tenancy (Per-Client Auth Isolation)
+
+The server supports per-client authentication isolation using `AsyncLocalStorage`. Each client has its own Google Sheets OAuth tokens stored separately.
+
+**Client Identification:**
+
+- **HTTP transport**: User ID extracted from validated Google OAuth access token (email or sub claim)
+- **Stdio transport**: Uses `default` user (single-client mode)
+
+**Authentication Flow (HTTP transport):**
+
+1. Client obtains a Google OAuth access token (using the same OAuth client ID as the server)
+2. Client sends requests to `/mcp` with `Authorization: Bearer <access_token>` header
+3. Server validates the token with Google's tokeninfo endpoint
+4. Server verifies the token's audience matches the configured client ID
+5. User email from the token is used for per-user token storage
+
+**Token Storage:**
+
+```
+~/.config/mcp-sheet-filler/
+├── tokens.json                    # Legacy/default user tokens (stdio)
+└── clients/
+    └── {user_email}/
+        └── tokens.json            # Per-client Google Sheets tokens
+```
+
+**Client Configuration Example:**
+
+Claude Desktop (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "sheet-filler": {
+      "url": "https://your-server.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ya29.xxx..."
+      }
+    }
+  }
+}
+```
+
+**Security Notes:**
+
+- All HTTP requests to `/mcp` require a valid Google OAuth access token
+- Token audience must match the server's OAuth client ID
+- User identity is cryptographically verified via Google
+- Each client's Google Sheets tokens stored in separate file with `0600` permissions
+- Clients cannot access other clients' tokens through the API
