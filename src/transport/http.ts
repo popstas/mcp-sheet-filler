@@ -19,8 +19,8 @@ export async function startHttpServer(): Promise<void> {
     res.json({ status: 'ok' });
   });
 
-  // MCP endpoint
-  app.post('/mcp', async (req: Request, res: Response) => {
+  // MCP endpoint: GET (SSE stream), POST (JSON-RPC), DELETE (session teardown)
+  app.all('/mcp', async (req: Request, res: Response) => {
     try {
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless mode
@@ -31,7 +31,7 @@ export async function startHttpServer(): Promise<void> {
       });
 
       await server.connect(transport);
-      await transport.handleRequest(req, res, req.body);
+      await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
     } catch (error) {
       logger.error('http_request_error', {
         error: error instanceof Error ? error.message : String(error),
