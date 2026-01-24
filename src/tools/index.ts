@@ -2,6 +2,7 @@ import type { StorageAdapter } from '../storage/adapter.js';
 import type { Field, SaveStatus } from '../types.js';
 import { FillerError } from '../types.js';
 import { isEmpty, processSaveValues } from '../validation.js';
+import { logger } from '../logger.js';
 import {
   getFieldsByNamesSchema,
   addFieldSchema,
@@ -45,6 +46,7 @@ export const handlers = {
       throw new FillerError('field_already_exists', `Field "${field.name}" already exists`);
     }
     await adapter.addField(field);
+    logger.info('tool_add_field_success', { name: field.name, type: field.type || 'string' });
     return { created: true, field };
   }) as ToolHandler<unknown, { created: boolean; field: Field }>,
 
@@ -73,6 +75,7 @@ export const handlers = {
       throw new FillerError('object_already_exists', `Object "${name}" already exists`);
     }
     await adapter.addObjectByName(name);
+    logger.info('tool_add_object_success', { name });
     return { created: true, object: { name } };
   }) as ToolHandler<unknown, { created: boolean; object: { name: string } }>,
 
@@ -100,6 +103,13 @@ export const handlers = {
     if (Object.keys(valuesToSave).length > 0) {
       await adapter.updateObjectFields(name, valuesToSave);
     }
+
+    // Summarize results by status
+    const statusCounts: Record<string, number> = {};
+    for (const status of Object.values(result)) {
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    }
+    logger.info('tool_save_object_result', { name, statusCounts });
 
     return { result };
   }) as ToolHandler<unknown, { result: Record<string, SaveStatus> }>,
@@ -192,16 +202,19 @@ export const handlers = {
     }
 
     adapter.setSheetId(sheet_id);
+    const resolvedId = adapter.getSheetId!();
+    logger.info('tool_use_sheet_id', { input: sheet_id, resolvedId });
 
     return {
       success: true,
-      sheet_id: adapter.getSheetId!(),
+      sheet_id: resolvedId,
     };
   }) as ToolHandler<unknown, { success: boolean; sheet_id: string }>,
 
   filler_google_auth: (async (args, adapter) => {
     const { action, device_code } = googleAuthSchema.parse(args);
     const config = getConfigFromEnv();
+    logger.debug('tool_google_auth', { action });
 
     if (action === 'status') {
       // Check if tokens exist
@@ -209,14 +222,17 @@ export const handlers = {
       const tokens = loadTokens(tokenPath);
 
       if (tokens && tokens.access_token) {
+        logger.debug('tool_google_auth_status', { authenticated: true, method: 'oauth' });
         return { status: 'Authenticated to Google Sheets' };
       }
 
       // Check if using service account
       if (config.googleServiceAccountKey) {
+        logger.debug('tool_google_auth_status', { authenticated: true, method: 'service_account' });
         return { status: 'Authenticated to Google Sheets (service account)' };
       }
 
+      logger.debug('tool_google_auth_status', { authenticated: false });
       return { status: 'Not authenticated. Use start_auth to begin authentication.' };
     }
 
@@ -229,6 +245,7 @@ export const handlers = {
       }
 
       const deviceCodeResponse = await requestDeviceCode(config.googleOAuthClientId);
+      logger.info('tool_google_auth_started', { user_code: deviceCodeResponse.user_code, expires_in: deviceCodeResponse.expires_in });
 
       return {
         verification_url: deviceCodeResponse.verification_url,
@@ -269,6 +286,7 @@ export const handlers = {
       adapter.setOAuthTokens(tokens);
     }
 
+    logger.info('tool_google_auth_completed');
     return { status: 'Authenticated to Google Sheets' };
   }) as ToolHandler<
     unknown,

@@ -1,4 +1,5 @@
 import type { Field, SaveStatus } from './types.js';
+import { logger } from './logger.js';
 
 /**
  * Check if a value is considered empty.
@@ -26,46 +27,57 @@ export function validateType(value: string, type: string | undefined): boolean {
   if (!type || type === 'string') return true;
 
   const trimmed = value.trim();
+  let valid = true;
 
   switch (type) {
     case 'number':
-      return !isNaN(Number(trimmed)) && trimmed !== '';
+      valid = !isNaN(Number(trimmed)) && trimmed !== '';
+      break;
 
     case 'date':
       // ISO-8601 date: YYYY-MM-DD
-      return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !isNaN(Date.parse(trimmed));
+      valid = /^\d{4}-\d{2}-\d{2}$/.test(trimmed) && !isNaN(Date.parse(trimmed));
+      break;
 
     case 'datetime':
       // ISO-8601 datetime
-      return !isNaN(Date.parse(trimmed));
+      valid = !isNaN(Date.parse(trimmed));
+      break;
 
     case 'url':
       try {
         new URL(trimmed);
-        return true;
+        valid = true;
       } catch {
-        return false;
+        valid = false;
       }
+      break;
 
     case 'email':
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+      valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+      break;
 
     case 'json':
       try {
         JSON.parse(trimmed);
-        return true;
+        valid = true;
       } catch {
-        return false;
+        valid = false;
       }
+      break;
 
     default:
       // enum:val1|val2|val3
       if (type.startsWith('enum:')) {
         const allowedValues = type.slice(5).split('|');
-        return allowedValues.includes(trimmed);
+        valid = allowedValues.includes(trimmed);
       }
-      return true;
   }
+
+  if (!valid) {
+    logger.debug('validation_type_failed', { type, valueLength: trimmed.length });
+  }
+  return valid;
 }
 
 export interface SaveResult {
@@ -114,6 +126,13 @@ export function processSaveValues(
     result[fieldName] = 'saved';
     valuesToSave[fieldName] = normalized;
   }
+
+  // Log processing summary
+  const statusCounts: Record<string, number> = {};
+  for (const status of Object.values(result)) {
+    statusCounts[status] = (statusCounts[status] || 0) + 1;
+  }
+  logger.debug('validation_process_save_values', { inputFields: Object.keys(values).length, statusCounts });
 
   return { result, valuesToSave };
 }

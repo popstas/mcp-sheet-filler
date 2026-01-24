@@ -197,7 +197,9 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         spreadsheetId: state.spreadsheetId,
         range: sheetName,
       });
-      return (response.data.values as string[][]) || [];
+      const rows = (response.data.values as string[][]) || [];
+      logger.debug('sheets_get_data', { tab: sheetName, rowCount: rows.length });
+      return rows;
     } catch (error: unknown) {
       const err = error as { code?: number; message?: string };
       if (err.code === 404) {
@@ -234,6 +236,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         fields = fields.filter((f) => nameSet.has(f.name));
       }
 
+      logger.debug('sheets_list_fields', { count: fields.length, filtered: !!names });
       return fields;
     },
 
@@ -241,11 +244,14 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (names.length === 0) return [];
       const allFields = await adapter.listFields();
       const nameSet = new Set(names);
-      return allFields.filter((f) => nameSet.has(f.name));
+      const found = allFields.filter((f) => nameSet.has(f.name));
+      logger.debug('sheets_get_fields_by_names', { requested: names.length, found: found.length });
+      return found;
     },
 
     async addField(field: Field): Promise<void> {
       await ensureValidTokens();
+      logger.debug('sheets_add_field', { name: field.name, type: field.type || 'string' });
       const row = [
         field.name,
         field.description || '',
@@ -287,10 +293,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async getObjectByName(name: string): Promise<DataObject | null> {
       const data = await getSheetData(dataTab);
-      if (data.length === 0) return null;
+      if (data.length === 0) {
+        logger.debug('sheets_get_object_by_name', { name, found: false, reason: 'empty_sheet' });
+        return null;
+      }
 
       const headers = data[0];
-      if (headers.length === 0) return null;
+      if (headers.length === 0) {
+        logger.debug('sheets_get_object_by_name', { name, found: false, reason: 'no_headers' });
+        return null;
+      }
 
       // First column is always the key
       const keyColIndex = 0;
@@ -305,19 +317,27 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
               values[headers[j]] = row[j];
             }
           }
+          logger.debug('sheets_get_object_by_name', { name, found: true, fieldCount: Object.keys(values).length });
           return { name, values };
         }
       }
 
+      logger.debug('sheets_get_object_by_name', { name, found: false });
       return null;
     },
 
     async listObjects(): Promise<DataObject[]> {
       const data = await getSheetData(dataTab);
-      if (data.length <= 1) return []; // No data rows, only headers
+      if (data.length <= 1) {
+        logger.debug('sheets_list_objects', { count: 0 });
+        return []; // No data rows, only headers
+      }
 
       const headers = data[0];
-      if (headers.length === 0) return [];
+      if (headers.length === 0) {
+        logger.debug('sheets_list_objects', { count: 0 });
+        return [];
+      }
 
       const objects: DataObject[] = [];
       for (let i = 1; i < data.length; i++) {
@@ -334,11 +354,13 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         objects.push({ name, values });
       }
 
+      logger.debug('sheets_list_objects', { count: objects.length });
       return objects;
     },
 
     async addObjectByName(name: string): Promise<void> {
       await ensureValidTokens();
+      logger.debug('sheets_add_object_by_name', { name });
       const headers = await getDataHeaders();
       if (headers.length === 0) {
         throw new FillerError('storage_error', 'Data sheet has no headers');
@@ -368,6 +390,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     async updateObjectFields(name: string, values: Record<string, string>): Promise<void> {
       await ensureValidTokens();
+      logger.debug('sheets_update_object_fields', { name, fields: Object.keys(values) });
       const data = await getSheetData(dataTab);
       if (data.length === 0) return;
 
