@@ -101,7 +101,8 @@ export async function startHttpServer(): Promise<void> {
   }
 
   const adapter = await createAdapter();
-  const server = createServer(adapter);
+  // Exclude filler_google_auth in HTTP mode - auth is handled via Authorization header
+  const server = createServer(adapter, ['filler_google_auth']);
 
   const app = express();
   app.use(express.json());

@@ -80,7 +80,7 @@ export async function createAdapter(): Promise<StorageAdapter> {
   return createSheetsAdapter(config);
 }
 
-export function createServer(adapter: StorageAdapter): McpServer {
+export function createServer(adapter: StorageAdapter, excludeTools: string[] = []): McpServer {
   const server = new McpServer({
     name: 'mcp-sheet-filler',
     version: '1.0.0',
@@ -89,6 +89,11 @@ export function createServer(adapter: StorageAdapter): McpServer {
   // Register all tools using registerTool with Zod schemas
   for (const [name, handler] of Object.entries(handlers)) {
     const toolName = name as ToolName;
+
+    // Skip excluded tools
+    if (excludeTools.includes(toolName)) {
+      continue;
+    }
     const def = TOOL_DEFINITIONS[toolName];
 
     server.registerTool(
