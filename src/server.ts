@@ -51,7 +51,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Add Field',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: true,
     },
@@ -62,6 +62,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'List Fields',
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: true,
     },
   },
@@ -71,6 +72,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Get Object by Name',
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: true,
     },
   },
@@ -80,7 +82,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Add Object by Name',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: true,
     },
@@ -91,7 +93,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Save Object (No Overwrite)',
       readOnlyHint: false,
-      destructiveHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: true,
     },
@@ -102,6 +104,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Get Next Object with Missing Fields',
       readOnlyHint: true,
+      destructiveHint: false,
       openWorldHint: true,
     },
   },
@@ -110,7 +113,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     inputSchema: useSheetIdSchema,
     annotations: {
       title: 'Use Sheet ID',
-      readOnlyHint: false,
+      readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: true,
       openWorldHint: false,
@@ -121,7 +124,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     inputSchema: googleAuthSchema,
     annotations: {
       title: 'Google Authentication',
-      readOnlyHint: false,
+      readOnlyHint: true,
       destructiveHint: false,
       idempotentHint: false,
       openWorldHint: true,
