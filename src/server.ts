@@ -53,7 +53,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_list_fields: {
@@ -62,7 +62,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'List Fields',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_get_object_by_name: {
@@ -71,7 +71,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Get Object by Name',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_add_object_by_name: {
@@ -82,7 +82,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_save_object_no_overwrite: {
@@ -93,7 +93,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       readOnlyHint: false,
       destructiveHint: false,
       idempotentHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_get_next_missing_fields_object: {
@@ -102,7 +102,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     annotations: {
       title: 'Get Next Object with Missing Fields',
       readOnlyHint: true,
-      openWorldHint: false,
+      openWorldHint: true,
     },
   },
   filler_use_sheet_id: {
