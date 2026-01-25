@@ -105,7 +105,7 @@ export async function startHttpServer(): Promise<void> {
   const server = createServer(adapter, ['filler_google_auth']);
 
   const app = express();
-  app.use(express.json());
+  app.use(express.json({ limit: '100kb' }));
 
   // Health check endpoint (no auth required)
   app.get('/health', (_req: Request, res: Response) => {

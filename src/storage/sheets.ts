@@ -163,7 +163,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     const client = google.sheets({ version: 'v4', auth: oauth2Client });
 
     mcpTokenClientCache.set(cacheKey, client);
-    logger.debug('sheets_client_from_mcp_token', { cacheKey });
+    logger.debug('sheets_client_from_mcp_token', { source: 'mcp_token' });
 
     return client;
   }

@@ -2,6 +2,19 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { z } from 'zod';
 
 import { getConfigFromEnv, type StorageAdapter } from './storage/adapter.js';
+
+/** Keys to redact from tool args when logging to avoid leaking secrets. */
+const REDACT_KEYS = ['device_code'];
+
+function redactArgsForLog(args: unknown): unknown {
+  if (args === null || typeof args !== 'object') return args;
+  const obj = args as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    out[k] = REDACT_KEYS.includes(k) ? '[REDACTED]' : v;
+  }
+  return out;
+}
 import { FillerError } from './types.js';
 import { handlers, type ToolName } from './tools/index.js';
 import { logger } from './logger.js';
@@ -88,7 +101,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
         inputSchema: def.inputSchema,
       },
       async (args) => {
-        logger.info(`tool_call: ${toolName}`, { args });
+        logger.info(`tool_call: ${toolName}`, { args: redactArgsForLog(args) });
         try {
           const result = await handler(args as Record<string, unknown>, adapter);
           logger.debug(`tool_result: ${toolName}`, { result });
@@ -97,7 +110,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
           };
         } catch (error) {
           if (error instanceof FillerError) {
-            logger.error(`tool_error: ${toolName}`, { error: error.toJSON(), args });
+            logger.error(`tool_error: ${toolName}`, { error: error.toJSON(), args: redactArgsForLog(args) });
             return {
               content: [{ type: 'text' as const, text: JSON.stringify({ error: error.toJSON() }) }],
               isError: true,
@@ -105,7 +118,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
           }
           logger.error(`tool_unexpected_error: ${toolName}`, {
             error: error instanceof Error ? error.message : String(error),
-            args,
+            args: redactArgsForLog(args),
           });
           throw error;
         }

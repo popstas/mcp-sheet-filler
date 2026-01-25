@@ -19,6 +19,9 @@ RUN npm run build
 # Stage 2: Production
 FROM node:20-alpine AS production
 
+# Create non-root user for running the app
+RUN addgroup -g 1000 -S app && adduser -D -u 1000 -G app -H app
+
 WORKDIR /app
 
 # Copy package files
@@ -30,6 +33,9 @@ RUN npm ci --omit=dev && \
 
 # Copy built application
 COPY --from=builder /app/dist ./dist
+
+# Own files as app user (for token/config paths under /app if used)
+RUN chown -R app:app /app
 
 # Environment defaults
 ENV TRANSPORT=http \
@@ -43,6 +49,8 @@ EXPOSE 3000
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+
+USER app
 
 # Run the server
 CMD ["node", "dist/index.js"]
