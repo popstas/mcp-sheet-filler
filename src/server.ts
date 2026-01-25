@@ -29,43 +29,103 @@ import {
   googleAuthSchema,
 } from './tools/schemas.js';
 
+/** MCP tool annotations: hints about tool behavior for clients (see https://modelcontextprotocol.io/docs/concepts/tools) */
+type ToolAnnotations = {
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+};
+
 type ToolDefinition = {
   description: string;
   inputSchema: z.ZodObject<z.ZodRawShape>;
+  annotations: ToolAnnotations;
 };
 
 const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_add_field: {
     description: 'Add a new field to the schema',
     inputSchema: addFieldSchema,
+    annotations: {
+      title: 'Add Field',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   filler_list_fields: {
     description: 'List all fields or a subset by names',
     inputSchema: listFieldsSchema,
+    annotations: {
+      title: 'List Fields',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
   },
   filler_get_object_by_name: {
     description: 'Get an object by its name (key field)',
     inputSchema: getObjectByNameSchema,
+    annotations: {
+      title: 'Get Object by Name',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
   },
   filler_add_object_by_name: {
     description: 'Create a new object with the given name',
     inputSchema: addObjectByNameSchema,
+    annotations: {
+      title: 'Add Object by Name',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   filler_save_object_no_overwrite: {
     description: 'Save field values without overwriting existing non-empty values',
     inputSchema: saveObjectNoOverwriteSchema,
+    annotations: {
+      title: 'Save Object (No Overwrite)',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   filler_get_next_missing_fields_object: {
     description: 'Get the first object that has missing auto-fill fields',
     inputSchema: getNextMissingFieldsObjectSchema,
+    annotations: {
+      title: 'Get Next Object with Missing Fields',
+      readOnlyHint: true,
+      openWorldHint: false,
+    },
   },
   filler_use_sheet_id: {
     description: 'Switch to a different Google Sheet by ID or URL (sheets backend only)',
     inputSchema: useSheetIdSchema,
+    annotations: {
+      title: 'Use Sheet ID',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
   },
   filler_google_auth: {
     description: 'Authenticate to Google Sheets using device code flow. Actions: status (check auth), start_auth (get verification URL/code), complete_auth (finish auth with device_code)',
     inputSchema: googleAuthSchema,
+    annotations: {
+      title: 'Google Authentication',
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
   },
 };
 
@@ -99,6 +159,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
       {
         description: def.description,
         inputSchema: def.inputSchema,
+        annotations: def.annotations,
       },
       async (args) => {
         logger.info(`tool_call: ${toolName}`, { args: redactArgsForLog(args) });
