@@ -1,5 +1,5 @@
-import { google, sheets_v4 } from 'googleapis';
-import { OAuth2Client } from 'google-auth-library';
+import { sheets, sheets_v4 } from '@googleapis/sheets';
+import { GoogleAuth, OAuth2Client } from 'google-auth-library';
 import type { StorageAdapter, StorageConfig, AuthMethod, AuthStatus } from './adapter.js';
 import type { Field, DataObject } from '../types.js';
 import { FillerError } from '../types.js';
@@ -103,7 +103,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   const dataTab = config.sheetTabData || 'data';
 
   // Mutable sheets client - will be recreated when auth changes
-  let sheets: sheets_v4.Sheets;
+  let sheetsClient: sheets_v4.Sheets;
 
   /**
    * Create OAuth client for a specific user with token refresh handling
@@ -134,7 +134,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       saveTokens(updatedTokens, tokenPath);
     });
 
-    const userSheets = google.sheets({ version: 'v4', auth: oauth2Client });
+    const userSheets = sheets({ version: 'v4', auth: oauth2Client });
 
     return {
       oauthClient: oauth2Client,
@@ -160,7 +160,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     const oauth2Client = new OAuth2Client();
     oauth2Client.setCredentials({ access_token: accessToken });
-    const client = google.sheets({ version: 'v4', auth: oauth2Client });
+    const client = sheets({ version: 'v4', auth: oauth2Client });
 
     mcpTokenClientCache.set(cacheKey, client);
     logger.debug('sheets_client_from_mcp_token', { source: 'mcp_token' });
@@ -213,22 +213,22 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
           'GOOGLE_SERVICE_ACCOUNT_KEY must be a JSON string or path to a JSON file'
         );
       }
-      const auth = new google.auth.GoogleAuth({
+      const auth = new GoogleAuth({
         credentials,
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
       });
       state.authMethod = 'service_account';
-      sheets = google.sheets({ version: 'v4', auth });
+      sheetsClient = sheets({ version: 'v4', auth });
       logger.info('sheets_auth_initialized', { method: 'service_account' });
       return;
     }
 
     // Priority 2: Application Default Credentials
-    const auth = new google.auth.GoogleAuth({
+    const auth = new GoogleAuth({
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
     state.authMethod = 'adc';
-    sheets = google.sheets({ version: 'v4', auth });
+    sheetsClient = sheets({ version: 'v4', auth });
     logger.info('sheets_auth_initialized', { method: 'adc' });
   }
 
@@ -253,7 +253,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     }
 
     // Priority 3: Fallback (service account or ADC)
-    return sheets;
+    return sheetsClient;
   }
 
   /**
