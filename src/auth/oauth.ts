@@ -2,6 +2,7 @@ import { OAuth2Client, Credentials } from 'google-auth-library';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../logger.js';
+import { getCurrentUserId, sanitizeUserId } from '../context.js';
 
 export interface OAuthTokens {
   access_token: string;
@@ -24,11 +25,33 @@ const DEVICE_CODE_URL = 'https://oauth2.googleapis.com/device/code';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 /**
- * Get the default token file path
+ * Get the base directory for token storage
+ */
+export function getTokenBaseDir(): string {
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+  return path.join(homeDir, '.config', 'mcp-sheet-filler');
+}
+
+/**
+ * Get the default token file path (legacy, for backward compatibility)
  */
 export function getDefaultTokenPath(): string {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-  return path.join(homeDir, '.config', 'mcp-sheet-filler', 'tokens.json');
+  return path.join(getTokenBaseDir(), 'tokens.json');
+}
+
+/**
+ * Get user-specific token file path
+ */
+export function getUserTokenPath(userId?: string): string {
+  const effectiveUserId = userId ?? getCurrentUserId();
+  const safeUserId = sanitizeUserId(effectiveUserId);
+
+  // Use base tokens.json for 'default' user (backward compatibility)
+  if (safeUserId === 'default') {
+    return getDefaultTokenPath();
+  }
+
+  return path.join(getTokenBaseDir(), 'clients', safeUserId, 'tokens.json');
 }
 
 /**

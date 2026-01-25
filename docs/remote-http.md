@@ -74,12 +74,17 @@ You can obtain a test access token using the OAuth Playground:
 1. Go to [Google OAuth 2.0 Playground](https://developers.google.com/oauthplayground/)
 2. Click the gear icon (⚙️) and check "Use your own OAuth credentials"
 3. Enter your OAuth client ID and secret
-4. Select scope: `https://www.googleapis.com/auth/spreadsheets`
+4. Select scopes (all three required):
+   - `openid` (for user identification)
+   - `email` (for user email)
+   - `https://www.googleapis.com/auth/spreadsheets` (for Sheets access)
 5. Click "Authorize APIs" and complete the flow
 6. Click "Exchange authorization code for tokens"
 7. Copy the `access_token` from the response
 
 **Note:** This token serves dual purpose - it authenticates you to the MCP server AND grants access to Google Sheets. No separate `filler_google_auth` step needed.
+
+**Important:** The `openid` and `email` scopes are required for user identification. Without them, the server cannot determine who is making the request.
 
 ### Testing Tools
 
@@ -179,11 +184,16 @@ ChatGPT Deep Research can use MCP servers to fetch data. Your server's tools wil
 
 The MCP access token is automatically reused for Google Sheets API access. This means:
 - **One auth, two purposes** - no separate `filler_google_auth` needed
-- Client obtains a Google OAuth token (with `spreadsheets` scope)
+- Client obtains a Google OAuth token with required scopes
 - Same token authenticates to MCP server AND accesses Google Sheets
 
+**Required scopes:**
+- `openid` - for user identification
+- `email` - for user email (recommended)
+- `https://www.googleapis.com/auth/spreadsheets` - for Sheets access
+
 **Requirements:**
-- Token must include `https://www.googleapis.com/auth/spreadsheets` scope
+- Token must include all required scopes listed above
 - Token must be issued for the same OAuth client ID as the server
 
 ### Alternative: Separate Sheets Auth

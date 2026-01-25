@@ -20,10 +20,11 @@ import {
   requestDeviceCode,
   pollForTokens,
   saveTokens,
-  getDefaultTokenPath,
+  getUserTokenPath,
   loadTokens,
 } from '../auth/oauth.js';
 import { getConfigFromEnv } from '../storage/adapter.js';
+import { getCurrentUserId } from '../context.js';
 
 type ToolHandler<T, R> = (args: T, adapter: StorageAdapter) => Promise<R>;
 
@@ -214,26 +215,27 @@ export const handlers = {
   filler_google_auth: (async (args, adapter) => {
     const { action, device_code } = googleAuthSchema.parse(args);
     const config = getConfigFromEnv();
-    logger.debug('tool_google_auth', { action });
+    const userId = getCurrentUserId();
+    logger.debug('tool_google_auth', { action, userId });
 
     if (action === 'status') {
-      // Check if tokens exist
-      const tokenPath = config.googleOAuthTokenPath || getDefaultTokenPath();
+      // Check if tokens exist for this user
+      const tokenPath = getUserTokenPath(userId);
       const tokens = loadTokens(tokenPath);
 
       if (tokens && tokens.access_token) {
-        logger.debug('tool_google_auth_status', { authenticated: true, method: 'oauth' });
-        return { status: 'Authenticated to Google Sheets' };
+        logger.debug('tool_google_auth_status', { userId, authenticated: true, method: 'oauth' });
+        return { status: 'Authenticated to Google Sheets', user_id: userId };
       }
 
-      // Check if using service account
+      // Check if using service account (shared, not user-specific)
       if (config.googleServiceAccountKey) {
-        logger.debug('tool_google_auth_status', { authenticated: true, method: 'service_account' });
-        return { status: 'Authenticated to Google Sheets (service account)' };
+        logger.debug('tool_google_auth_status', { userId, authenticated: true, method: 'service_account' });
+        return { status: 'Authenticated to Google Sheets (service account)', user_id: userId };
       }
 
-      logger.debug('tool_google_auth_status', { authenticated: false });
-      return { status: 'Not authenticated. Use start_auth to begin authentication.' };
+      logger.debug('tool_google_auth_status', { userId, authenticated: false });
+      return { status: 'Not authenticated. Use start_auth to begin authentication.', user_id: userId };
     }
 
     if (action === 'start_auth') {
@@ -245,7 +247,7 @@ export const handlers = {
       }
 
       const deviceCodeResponse = await requestDeviceCode(config.googleOAuthClientId);
-      logger.info('tool_google_auth_started', { user_code: deviceCodeResponse.user_code, expires_in: deviceCodeResponse.expires_in });
+      logger.info('tool_google_auth_started', { userId, user_code: deviceCodeResponse.user_code, expires_in: deviceCodeResponse.expires_in });
 
       return {
         verification_url: deviceCodeResponse.verification_url,
@@ -253,6 +255,7 @@ export const handlers = {
         device_code: deviceCodeResponse.device_code,
         expires_in: deviceCodeResponse.expires_in,
         instructions: `Visit ${deviceCodeResponse.verification_url} and enter code: ${deviceCodeResponse.user_code}`,
+        user_id: userId,
       };
     }
 
@@ -277,21 +280,21 @@ export const handlers = {
       device_code
     );
 
-    // Save tokens to file
-    const tokenPath = config.googleOAuthTokenPath || getDefaultTokenPath();
+    // Save tokens to user-specific file
+    const tokenPath = getUserTokenPath(userId);
     saveTokens(tokens, tokenPath);
 
-    // Update the adapter with new tokens if available
+    // Update the adapter with new tokens for this user
     if (adapter.setOAuthTokens) {
       adapter.setOAuthTokens(tokens);
     }
 
-    logger.info('tool_google_auth_completed');
-    return { status: 'Authenticated to Google Sheets' };
+    logger.info('tool_google_auth_completed', { userId });
+    return { status: 'Authenticated to Google Sheets', user_id: userId };
   }) as ToolHandler<
     unknown,
-    | { status: string }
-    | { verification_url: string; user_code: string; device_code: string; expires_in: number; instructions: string }
+    | { status: string; user_id: string }
+    | { verification_url: string; user_code: string; device_code: string; expires_in: number; instructions: string; user_id: string }
   >,
 };
 

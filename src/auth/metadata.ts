@@ -12,6 +12,11 @@ export function generateProtectedResourceMetadata(config: AuthConfig): Protected
     resource: config.resourceUrl,
     authorization_servers: [GOOGLE_AUTHORIZATION_SERVER],
     bearer_methods_supported: ['header'],
+    scopes_supported: [
+      'openid',
+      'email',
+      'https://www.googleapis.com/auth/spreadsheets',
+    ],
   };
 }
 
