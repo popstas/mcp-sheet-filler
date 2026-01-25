@@ -1,14 +1,5 @@
 import { z } from 'zod';
 
-export const getFieldsByNamesSchema = z.object({
-  names: z.array(z.string()).describe('List of field names to retrieve'),
-  include_instructions: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe('Include instructions in response'),
-});
-
 export const addFieldSchema = z.object({
   field: z
     .object({
@@ -31,12 +22,13 @@ export const listFieldsSchema = z.object({
     .describe('Include instructions in response'),
 });
 
-export const getObjectSchema = z.object({
-  id: z.string().describe('Object identifier (key field value)'),
-});
-
 export const getObjectByNameSchema = z.object({
   name: z.string().describe('Object name (key field value)'),
+  include_field_meta: z
+    .boolean()
+    .optional()
+    .default(true)
+    .describe('Include field metadata in response'),
 });
 
 export const addObjectByNameSchema = z.object({
@@ -46,15 +38,6 @@ export const addObjectByNameSchema = z.object({
 export const saveObjectNoOverwriteSchema = z.object({
   name: z.string().describe('Object name'),
   values: z.record(z.string(), z.string()).describe('Field values to save'),
-});
-
-export const getMissingAutoFieldsSchema = z.object({
-  name: z.string().describe('Object name'),
-  include_field_meta: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe('Include field metadata in response'),
 });
 
 export const getNextMissingFieldsObjectSchema = z.object({

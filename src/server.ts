@@ -6,14 +6,11 @@ import { FillerError } from './types.js';
 import { handlers, type ToolName } from './tools/index.js';
 import { logger } from './logger.js';
 import {
-  getFieldsByNamesSchema,
   addFieldSchema,
   listFieldsSchema,
-  getObjectSchema,
   getObjectByNameSchema,
   addObjectByNameSchema,
   saveObjectNoOverwriteSchema,
-  getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
   googleAuthSchema,
@@ -25,10 +22,6 @@ type ToolDefinition = {
 };
 
 const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
-  filler_get_fields_by_names: {
-    description: 'Get field metadata by list of names',
-    inputSchema: getFieldsByNamesSchema,
-  },
   filler_add_field: {
     description: 'Add a new field to the schema',
     inputSchema: addFieldSchema,
@@ -36,10 +29,6 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_list_fields: {
     description: 'List all fields or a subset by names',
     inputSchema: listFieldsSchema,
-  },
-  filler_get_object: {
-    description: 'Get an object by its identifier',
-    inputSchema: getObjectSchema,
   },
   filler_get_object_by_name: {
     description: 'Get an object by its name (key field)',
@@ -52,10 +41,6 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_save_object_no_overwrite: {
     description: 'Save field values without overwriting existing non-empty values',
     inputSchema: saveObjectNoOverwriteSchema,
-  },
-  filler_get_missing_auto_fields: {
-    description: 'Get list of auto-fill fields that are empty for an object',
-    inputSchema: getMissingAutoFieldsSchema,
   },
   filler_get_next_missing_fields_object: {
     description: 'Get the first object that has missing auto-fill fields',

@@ -4,14 +4,11 @@ import { FillerError } from '../types.js';
 import { isEmpty, processSaveValues } from '../validation.js';
 import { logger } from '../logger.js';
 import {
-  getFieldsByNamesSchema,
   addFieldSchema,
   listFieldsSchema,
-  getObjectSchema,
   getObjectByNameSchema,
   addObjectByNameSchema,
   saveObjectNoOverwriteSchema,
-  getMissingAutoFieldsSchema,
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
   googleAuthSchema,
@@ -34,12 +31,6 @@ function stripInstructions(fields: Field[], include: boolean): Field[] {
 }
 
 export const handlers = {
-  filler_get_fields_by_names: (async (args, adapter) => {
-    const { names, include_instructions } = getFieldsByNamesSchema.parse(args);
-    const fields = await adapter.getFieldsByNames(names);
-    return { fields: stripInstructions(fields, include_instructions) };
-  }) as ToolHandler<unknown, { fields: Field[] }>,
-
   filler_add_field: (async (args, adapter) => {
     const { field } = addFieldSchema.parse(args);
     const existing = await adapter.getFieldsByNames([field.name]);
@@ -57,17 +48,40 @@ export const handlers = {
     return { fields: stripInstructions(fields, include_instructions) };
   }) as ToolHandler<unknown, { fields: Field[] }>,
 
-  filler_get_object: (async (args, adapter) => {
-    const { id } = getObjectSchema.parse(args);
-    const obj = await adapter.getObjectByName(id);
-    return { found: obj !== null, object: obj ?? undefined };
-  }) as ToolHandler<unknown, { found: boolean; object?: { name: string; values: Record<string, string> } }>,
-
   filler_get_object_by_name: (async (args, adapter) => {
-    const { name } = getObjectByNameSchema.parse(args);
+    const { name, include_field_meta } = getObjectByNameSchema.parse(args);
     const obj = await adapter.getObjectByName(name);
-    return { found: obj !== null, object: obj ?? undefined };
-  }) as ToolHandler<unknown, { found: boolean; object?: { name: string; values: Record<string, string> } }>,
+
+    if (!obj) {
+      return { found: false };
+    }
+
+    // Get list of missing auto fields
+    const fields = await adapter.listFields();
+    const autoFields = fields.filter((f) => f.auto === true);
+    const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
+
+    const missing = missingFields.map((f) => {
+      if (include_field_meta) {
+        return {
+          name: f.name,
+          type: f.type,
+          example: f.example,
+          instructions: f.instructions,
+        };
+      }
+      return { name: f.name };
+    });
+
+    return { found: true, object: obj, missing };
+  }) as ToolHandler<
+    unknown,
+    {
+      found: boolean;
+      object?: { name: string; values: Record<string, string> };
+      missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+    }
+  >,
 
   filler_add_object_by_name: (async (args, adapter) => {
     const { name } = addObjectByNameSchema.parse(args);
@@ -114,37 +128,6 @@ export const handlers = {
 
     return { result };
   }) as ToolHandler<unknown, { result: Record<string, SaveStatus> }>,
-
-  filler_get_missing_auto_fields: (async (args, adapter) => {
-    const { name, include_field_meta } = getMissingAutoFieldsSchema.parse(args);
-
-    const obj = await adapter.getObjectByName(name);
-    if (!obj) {
-      throw new FillerError('object_not_found', `Object "${name}" not found`);
-    }
-
-    const fields = await adapter.listFields();
-    const autoFields = fields.filter((f) => f.auto === true);
-
-    const missing = autoFields
-      .filter((f) => isEmpty(obj.values[f.name]))
-      .map((f) => {
-        if (include_field_meta) {
-          return {
-            name: f.name,
-            type: f.type,
-            example: f.example,
-            instructions: f.instructions,
-          };
-        }
-        return { name: f.name };
-      });
-
-    return { missing };
-  }) as ToolHandler<
-    unknown,
-    { missing: Array<{ name: string; type?: string; example?: string; instructions?: string }> }
-  >,
 
   filler_get_next_missing_fields_object: (async (args, adapter) => {
     const { include_field_meta } = getNextMissingFieldsObjectSchema.parse(args);

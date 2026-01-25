@@ -55,9 +55,21 @@ Fields with `auto: true` are candidates for auto-filling. Each field has:
 
 #### 2. Get an Object
 
-Retrieve the next object you need to fill: `filler_get_next_missing_fields_object()`.
+Two options for retrieving objects:
 
-This returns the first object with missing auto fields, along with what needs to be filled. If `found: false`, all objects are complete.
+**Option A: Get the next object with missing fields**
+```
+filler_get_next_missing_fields_object()
+```
+Returns the first object with missing auto fields. If `found: false`, all objects are complete.
+
+**Option B: Get a specific object by name**
+```
+filler_get_object_by_name({ name: "Acme Corp" })
+```
+Returns the object with its missing auto fields. Useful when you know which object to work on.
+
+Both return `{ found, object, missing }` - the object data and list of fields that need filling.
 
 #### 3. Collect Values
 

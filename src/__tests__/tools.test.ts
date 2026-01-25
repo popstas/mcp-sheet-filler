@@ -94,28 +94,6 @@ describe('Tool Handlers', () => {
     });
   });
 
-  describe('filler_get_fields_by_names', () => {
-    it('gets fields by names', async () => {
-      const result = await handlers.filler_get_fields_by_names(
-        { names: ['email'] },
-        adapter
-      );
-
-      expect(result.fields).toHaveLength(1);
-      expect(result.fields[0].name).toBe('email');
-      expect(result.fields[0].instructions).toBe('Find email');
-    });
-
-    it('returns empty array for non-existent fields', async () => {
-      const result = await handlers.filler_get_fields_by_names(
-        { names: ['nonexistent'] },
-        adapter
-      );
-
-      expect(result.fields).toEqual([]);
-    });
-  });
-
   describe('filler_add_field', () => {
     it('adds a new field', async () => {
       const result = await handlers.filler_add_field(
@@ -144,37 +122,59 @@ describe('Tool Handlers', () => {
     });
   });
 
-  describe('filler_get_object / filler_get_object_by_name', () => {
+  describe('filler_get_object_by_name', () => {
     beforeEach(async () => {
       await adapter.addObjectByName('acme');
       await adapter.updateObjectFields('acme', { email: 'info@acme.com' });
     });
 
-    it('gets object by id', async () => {
-      const result = await handlers.filler_get_object({ id: 'acme' }, adapter);
-
-      expect(result.found).toBe(true);
-      expect(result.object?.name).toBe('acme');
-      expect(result.object?.values.email).toBe('info@acme.com');
-    });
-
-    it('gets object by name', async () => {
+    it('gets object by name with missing auto fields', async () => {
       const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
 
       expect(result.found).toBe(true);
       expect(result.object?.name).toBe('acme');
+      expect(result.object?.values.email).toBe('info@acme.com');
+      // email is set, website is missing (both are auto fields)
+      expect(result.missing).toHaveLength(1);
+      expect(result.missing?.[0].name).toBe('website');
     });
 
     it('returns found=false for non-existent object', async () => {
-      const result = await handlers.filler_get_object({ id: 'nonexistent' }, adapter);
+      const result = await handlers.filler_get_object_by_name({ name: 'nonexistent' }, adapter);
 
       expect(result.found).toBe(false);
       expect(result.object).toBeUndefined();
+      expect(result.missing).toBeUndefined();
+    });
+
+    it('includes field metadata by default', async () => {
+      const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
+
+      expect(result.missing?.[0].instructions).toBeDefined();
+      expect(result.missing?.[0].type).toBeDefined();
+    });
+
+    it('excludes field metadata when include_field_meta is false', async () => {
+      const result = await handlers.filler_get_object_by_name(
+        { name: 'acme', include_field_meta: false },
+        adapter
+      );
+
+      expect(result.missing?.[0]).toEqual({ name: 'website' });
+    });
+
+    it('returns empty missing array when all auto fields are filled', async () => {
+      await adapter.updateObjectFields('acme', { website: 'https://acme.com' });
+
+      const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
+
+      expect(result.found).toBe(true);
+      expect(result.missing).toHaveLength(0);
     });
   });
 
   describe('filler_add_object_by_name', () => {
-    it('creates a new object', async () => {
+    it('creates a new object with simple return type', async () => {
       const result = await handlers.filler_add_object_by_name({ name: 'newobj' }, adapter);
 
       expect(result.created).toBe(true);
@@ -274,60 +274,6 @@ describe('Tool Handlers', () => {
       expect(result.result.website).toBe('saved');
       expect(result.result.age).toBe('rejected_invalid_type');
       expect(result.result.unknown).toBe('rejected_unknown_field');
-    });
-  });
-
-  describe('filler_get_missing_auto_fields', () => {
-    beforeEach(async () => {
-      await adapter.addObjectByName('acme');
-      await adapter.updateObjectFields('acme', { email: 'info@acme.com' });
-    });
-
-    it('returns empty auto fields', async () => {
-      const result = await handlers.filler_get_missing_auto_fields(
-        { name: 'acme' },
-        adapter
-      );
-
-      // email is set, website is auto but empty
-      expect(result.missing).toHaveLength(1);
-      expect(result.missing[0].name).toBe('website');
-    });
-
-    it('includes field metadata by default', async () => {
-      const result = await handlers.filler_get_missing_auto_fields(
-        { name: 'acme' },
-        adapter
-      );
-
-      expect(result.missing[0].instructions).toBe('Find website');
-      expect(result.missing[0].type).toBe('url');
-    });
-
-    it('excludes field metadata when include_field_meta is false', async () => {
-      const result = await handlers.filler_get_missing_auto_fields(
-        { name: 'acme', include_field_meta: false },
-        adapter
-      );
-
-      expect(result.missing[0]).toEqual({ name: 'website' });
-    });
-
-    it('returns empty array when all auto fields are filled', async () => {
-      await adapter.updateObjectFields('acme', { website: 'https://acme.com' });
-
-      const result = await handlers.filler_get_missing_auto_fields(
-        { name: 'acme' },
-        adapter
-      );
-
-      expect(result.missing).toHaveLength(0);
-    });
-
-    it('throws error for non-existent object', async () => {
-      await expect(
-        handlers.filler_get_missing_auto_fields({ name: 'nonexistent' }, adapter)
-      ).rejects.toThrow(FillerError);
     });
   });
 
