@@ -1,56 +1,37 @@
 # Stage 1: Build
-FROM node:20-alpine AS builder
-
+FROM node:24-alpine AS builder
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install all dependencies (including devDependencies for build)
 RUN npm ci
 
-# Copy source code
 COPY tsconfig.json ./
 COPY src ./src
-
-# Build TypeScript
 RUN npm run build
 
 # Stage 2: Production
-FROM node:20-alpine AS production
-
-# Create non-root user for running the app
-RUN addgroup -g 1000 -S app && adduser -D -u 1000 -G app -H app
-
+FROM node:24-alpine AS production
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-
-# Install production dependencies only
-RUN npm ci --omit=dev && \
-    rm -rf /root/.npm /tmp/*
-
-# Copy built application
-COPY --from=builder /app/dist ./dist
-
-# Own files as app user (for token/config paths under /app if used)
-RUN chown -R app:app /app
-
-# Environment defaults
 ENV TRANSPORT=http \
     PORT=3000 \
     HOST=0.0.0.0 \
-    STORAGE_BACKEND=sheets
+    NODE_ENV=production
 
-# Expose port
+# Ставим prod deps
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Копируем билд и сразу выставляем владельца на node
+COPY --from=builder --chown=node:node /app/dist ./dist
+
+# Если приложению нужно писать под /app (токены/кэш/конфиги) — это критично:
+RUN chown -R node:node /app
+
 EXPOSE 3000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
-USER app
-
-# Run the server
+USER node
 CMD ["node", "dist/index.js"]
