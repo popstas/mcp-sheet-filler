@@ -18,7 +18,6 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       args: ['tsx', 'src/index.ts'],
       env: {
         ...process.env,
-        STORAGE_BACKEND: 'sheets',
         OBJECT_KEY_FIELD: 'name',
       },
       stderr: 'pipe',

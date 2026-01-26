@@ -8,7 +8,6 @@ services:
     environment:
       - TRANSPORT=http
       - PORT=3000
-      - STORAGE_BACKEND=sheets
       # Required for Google Sheets backend:
       - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
       # Option 1: Service account authentication
