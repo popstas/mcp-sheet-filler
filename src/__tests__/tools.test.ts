@@ -330,6 +330,54 @@ describe('Tool Handlers', () => {
     });
   });
 
+  describe('filler_init', () => {
+    it('throws backend_not_configured when adapter lacks initSheet', async () => {
+      // Base mock adapter doesn't have initSheet
+      await expect(handlers.filler_init({}, adapter)).rejects.toThrow(FillerError);
+
+      try {
+        await handlers.filler_init({}, adapter);
+      } catch (error) {
+        expect((error as FillerError).code).toBe('backend_not_configured');
+        expect((error as FillerError).message).toContain('sheets backend');
+      }
+    });
+
+    it('returns success with tab and key info when initSheet is present', async () => {
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async initSheet() {
+          return { fieldsTab: 'fields', dataTab: 'data', keyField: 'name' };
+        },
+      };
+
+      const result = await handlers.filler_init({}, mockAdapter);
+
+      expect(result.success).toBe(true);
+      expect(result.fieldsTab).toBe('fields');
+      expect(result.dataTab).toBe('data');
+      expect(result.keyField).toBe('name');
+    });
+
+    it('propagates storage_error when tabs already exist', async () => {
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async initSheet() {
+          throw new FillerError('storage_error', 'Tab "fields" already exists');
+        },
+      };
+
+      await expect(handlers.filler_init({}, mockAdapter)).rejects.toThrow(FillerError);
+
+      try {
+        await handlers.filler_init({}, mockAdapter);
+      } catch (error) {
+        expect((error as FillerError).code).toBe('storage_error');
+        expect((error as FillerError).message).toContain('already exists');
+      }
+    });
+  });
+
   describe('filler_use_sheet_id', () => {
     it('throws error when backend does not support setSheetId', async () => {
       // Mock adapter doesn't have setSheetId

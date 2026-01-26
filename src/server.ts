@@ -27,6 +27,7 @@ import {
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
   googleAuthSchema,
+  initSheetSchema,
 } from './tools/schemas.js';
 
 /** MCP tool annotations: hints about tool behavior for clients (see https://modelcontextprotocol.io/docs/concepts/tools) */
@@ -126,6 +127,17 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       title: 'Google Authentication',
       readOnlyHint: true,
       destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  },
+  filler_init: {
+    description: 'Initialize the current spreadsheet by creating data and fields tabs with headers',
+    inputSchema: initSheetSchema,
+    annotations: {
+      title: 'Initialize Sheet',
+      readOnlyHint: false,
+      destructiveHint: true,
       idempotentHint: false,
       openWorldHint: true,
     },

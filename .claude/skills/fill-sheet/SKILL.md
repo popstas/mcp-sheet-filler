@@ -31,6 +31,17 @@ filler_google_auth({ action: "complete_auth", device_code: "xyz123" })
 → { status: "Authenticated to Google Sheets" }
 ```
 
+#### Initialize a New Sheet
+
+If the spreadsheet doesn't have `data` and `fields` tabs yet, create them:
+
+```
+filler_init()
+→ { success: true, fieldsTab: "fields", dataTab: "data", keyField: "name" }
+```
+
+This creates both tabs with their header rows. Errors if either tab already exists.
+
 #### Switch to a Different Sheet
 
 To work with a different Google Sheet:

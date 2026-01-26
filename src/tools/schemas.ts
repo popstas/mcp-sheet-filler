@@ -59,3 +59,5 @@ export const googleAuthSchema = z.object({
     .optional()
     .describe('Device code from start_auth (required for complete_auth action)'),
 });
+
+export const initSheetSchema = z.object({});

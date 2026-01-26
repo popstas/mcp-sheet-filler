@@ -12,6 +12,7 @@ import {
   getNextMissingFieldsObjectSchema,
   useSheetIdSchema,
   googleAuthSchema,
+  initSheetSchema,
 } from './schemas.js';
 import {
   requestDeviceCode,
@@ -279,6 +280,22 @@ export const handlers = {
     | { status: string; user_id: string }
     | { verification_url: string; user_code: string; device_code: string; expires_in: number; instructions: string; user_id: string }
   >,
+
+  filler_init: (async (args, adapter) => {
+    initSheetSchema.parse(args);
+
+    if (!adapter.initSheet) {
+      throw new FillerError(
+        'backend_not_configured',
+        'filler_init is only available with the sheets backend'
+      );
+    }
+
+    const { fieldsTab, dataTab, keyField } = await adapter.initSheet();
+    logger.info('tool_init_success', { fieldsTab, dataTab, keyField });
+
+    return { success: true, fieldsTab, dataTab, keyField };
+  }) as ToolHandler<unknown, { success: boolean; fieldsTab: string; dataTab: string; keyField: string }>,
 };
 
 export type ToolName = keyof typeof handlers;

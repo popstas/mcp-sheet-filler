@@ -110,6 +110,16 @@ Values like `0`, `false`, `"0"` are **not** empty.
 
 ## MCP Tools
 
+### filler_init
+
+Initialize the current spreadsheet by creating `data` and `fields` tabs with header rows. Errors if either tab already exists. No parameters required.
+
+```json
+{}
+```
+
+Returns `{ success, fieldsTab, dataTab, keyField }`.
+
 ### filler_list_fields
 
 List all fields or a subset.

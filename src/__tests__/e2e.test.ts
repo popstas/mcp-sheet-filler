@@ -50,6 +50,7 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
         'filler_get_object',
         'filler_get_object_by_name',
         'filler_google_auth',
+        'filler_init',
         'filler_list_fields',
         'filler_save_object_no_overwrite',
         'filler_use_sheet_id',

@@ -587,6 +587,76 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       return fields.map((f) => f.name);
     },
 
+    async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string }> {
+      await ensureValidTokens();
+      const client = getSheetsClient();
+
+      // Check if tabs already exist
+      try {
+        const spreadsheet = await client.spreadsheets.get({
+          spreadsheetId: state.spreadsheetId,
+          fields: 'sheets.properties.title',
+        });
+
+        const existingTabs = (spreadsheet.data.sheets || []).map(
+          (s) => s.properties?.title || ''
+        );
+
+        if (existingTabs.includes(fieldsTab)) {
+          throw new FillerError('storage_error', `Tab "${fieldsTab}" already exists`);
+        }
+        if (existingTabs.includes(dataTab)) {
+          throw new FillerError('storage_error', `Tab "${dataTab}" already exists`);
+        }
+      } catch (error) {
+        if (error instanceof FillerError) throw error;
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to read spreadsheet: ${err.message}`);
+      }
+
+      // Create both tabs
+      try {
+        await client.spreadsheets.batchUpdate({
+          spreadsheetId: state.spreadsheetId,
+          requestBody: {
+            requests: [
+              { addSheet: { properties: { title: fieldsTab } } },
+              { addSheet: { properties: { title: dataTab } } },
+            ],
+          },
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to create tabs: ${err.message}`);
+      }
+
+      // Write headers to both tabs
+      try {
+        await client.spreadsheets.values.batchUpdate({
+          spreadsheetId: state.spreadsheetId,
+          requestBody: {
+            valueInputOption: 'RAW',
+            data: [
+              {
+                range: `${fieldsTab}!A1:F1`,
+                values: [FIELD_HEADERS],
+              },
+              {
+                range: `${dataTab}!A1`,
+                values: [[config.objectKeyField]],
+              },
+            ],
+          },
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to write headers: ${err.message}`);
+      }
+
+      logger.info('sheets_init', { fieldsTab, dataTab, keyField: config.objectKeyField });
+      return { fieldsTab, dataTab, keyField: config.objectKeyField };
+    },
+
     setSheetId(idOrUrl: string): void {
       state.spreadsheetId = extractSheetIdFromUrl(idOrUrl);
     },

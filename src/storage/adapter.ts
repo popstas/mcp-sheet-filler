@@ -23,6 +23,7 @@ export interface StorageAdapter {
   // Optional: only implemented by sheets adapter for auth status and OAuth
   getAuthStatus?(): AuthStatus;
   setOAuthTokens?(tokens: OAuthTokens): void;
+  initSheet?(): Promise<{ fieldsTab: string; dataTab: string; keyField: string }>;
 }
 
 export interface StorageConfig {
