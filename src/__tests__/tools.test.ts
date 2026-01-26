@@ -347,7 +347,7 @@ describe('Tool Handlers', () => {
       const mockAdapter: StorageAdapter = {
         ...adapter,
         async initSheet() {
-          return { fieldsTab: 'fields', dataTab: 'data', keyField: 'name' };
+          return { fieldsTab: 'fields', dataTab: 'Sheet1', keyField: 'name' };
         },
       };
 
@@ -355,7 +355,7 @@ describe('Tool Handlers', () => {
 
       expect(result.success).toBe(true);
       expect(result.fieldsTab).toBe('fields');
-      expect(result.dataTab).toBe('data');
+      expect(result.dataTab).toBe('Sheet1');
       expect(result.keyField).toBe('name');
     });
 

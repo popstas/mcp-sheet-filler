@@ -132,7 +132,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     },
   },
   filler_init: {
-    description: 'Initialize the current spreadsheet by creating data and fields tabs with headers',
+    description: 'Initialize the current spreadsheet by creating a fields tab populated from the first tab\'s column headers',
     inputSchema: initSheetSchema,
     annotations: {
       title: 'Initialize Sheet',

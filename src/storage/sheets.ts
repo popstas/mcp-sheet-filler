@@ -100,7 +100,38 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   };
 
   const fieldsTab = config.sheetTabFields || 'fields';
-  const dataTab = config.sheetTabData || 'data';
+  let dataTab = config.sheetTabData; // undefined means "use first tab"
+
+  // Resolve first tab name from spreadsheet metadata
+  async function getFirstTabName(): Promise<string> {
+    await ensureValidTokens();
+    const client = getSheetsClient();
+    try {
+      const spreadsheet = await client.spreadsheets.get({
+        spreadsheetId: state.spreadsheetId,
+        fields: 'sheets.properties.title',
+      });
+      const tabs = (spreadsheet.data.sheets || []).map(
+        (s) => s.properties?.title || ''
+      );
+      if (tabs.length === 0) {
+        throw new FillerError('storage_error', 'Spreadsheet has no tabs');
+      }
+      return tabs[0];
+    } catch (error) {
+      if (error instanceof FillerError) throw error;
+      const err = error as { message?: string };
+      throw new FillerError('storage_error', `Failed to read spreadsheet: ${err.message}`);
+    }
+  }
+
+  // Returns dataTab if configured, otherwise resolves to first tab and caches
+  async function resolveDataTab(): Promise<string> {
+    if (dataTab) return dataTab;
+    const firstTab = await getFirstTabName();
+    dataTab = firstTab;
+    return firstTab;
+  }
 
   // Mutable sheets client - will be recreated when auth changes
   let sheetsClient: sheets_v4.Sheets;
@@ -337,7 +368,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   // Helper to get data headers (first row)
   async function getDataHeaders(): Promise<string[]> {
-    const data = await getSheetData(dataTab);
+    const resolvedDataTab = await resolveDataTab();
+    const data = await getSheetData(resolvedDataTab);
     return data[0] || [];
   }
 
@@ -352,10 +384,26 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   const adapter: StorageAdapter = {
     async listFields(names?: string[]): Promise<Field[]> {
-      const data = await getSheetData(fieldsTab);
-      // Skip header row
-      const rows = data.slice(1);
-      let fields = rows.map(rowToField).filter((f) => f.name);
+      let fields: Field[];
+      try {
+        const data = await getSheetData(fieldsTab);
+        // Skip header row
+        const rows = data.slice(1);
+        fields = rows.map(rowToField).filter((f) => f.name);
+      } catch (error) {
+        // Fallback: derive fields from data tab headers when fields tab doesn't exist
+        if (error instanceof FillerError && error.message.includes('not found')) {
+          const headers = await getDataHeaders();
+          fields = headers.filter((h) => h).map((h) => ({
+            name: h,
+            type: 'string',
+            auto: false,
+          }));
+          logger.debug('sheets_list_fields_fallback', { count: fields.length });
+        } else {
+          throw error;
+        }
+      }
 
       if (names && names.length > 0) {
         const nameSet = new Set(names);
@@ -403,13 +451,14 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       }
 
       // Also add column to data sheet if it doesn't exist
+      const resolvedDataTab = await resolveDataTab();
       const headers = await getDataHeaders();
       if (!headers.includes(field.name)) {
         const colIndex = headers.length;
         const colLetter = columnIndexToLetter(colIndex);
         await client.spreadsheets.values.update({
           spreadsheetId: state.spreadsheetId,
-          range: `${dataTab}!${colLetter}1`,
+          range: `${resolvedDataTab}!${colLetter}1`,
           valueInputOption: 'RAW',
           requestBody: {
             values: [[field.name]],
@@ -419,7 +468,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     },
 
     async getObjectByName(name: string): Promise<DataObject | null> {
-      const data = await getSheetData(dataTab);
+      const resolvedDataTab = await resolveDataTab();
+      const data = await getSheetData(resolvedDataTab);
       if (data.length === 0) {
         logger.debug('sheets_get_object_by_name', { name, found: false, reason: 'empty_sheet' });
         return null;
@@ -454,7 +504,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     },
 
     async listObjects(): Promise<DataObject[]> {
-      const data = await getSheetData(dataTab);
+      const resolvedDataTab = await resolveDataTab();
+      const data = await getSheetData(resolvedDataTab);
       if (data.length <= 1) {
         logger.debug('sheets_list_objects', { count: 0 });
         return []; // No data rows, only headers
@@ -498,13 +549,14 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       const keyColIndex = 0;
 
       // Create row with only the key field set
+      const resolvedDataTab = await resolveDataTab();
       const row = new Array(headers.length).fill('');
       row[keyColIndex] = name;
 
       try {
         await client.spreadsheets.values.append({
           spreadsheetId: state.spreadsheetId,
-          range: `${dataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
+          range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
           valueInputOption: 'RAW',
           requestBody: {
             values: [row],
@@ -520,7 +572,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       await ensureValidTokens();
       const client = getSheetsClient();
       logger.debug('sheets_update_object_fields', { name, fields: Object.keys(values) });
-      const data = await getSheetData(dataTab);
+      const resolvedDataTab = await resolveDataTab();
+      const data = await getSheetData(resolvedDataTab);
       if (data.length === 0) return;
 
       const headers = data[0];
@@ -561,7 +614,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         }
 
         updateData.push({
-          range: `${dataTab}!${colLetter}${rowIndex}`,
+          range: `${resolvedDataTab}!${colLetter}${rowIndex}`,
           values: [[cellValue]],
         });
       }
@@ -591,22 +644,20 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       await ensureValidTokens();
       const client = getSheetsClient();
 
-      // Check if tabs already exist
+      let existingTabs: string[];
+      // Get existing tabs
       try {
         const spreadsheet = await client.spreadsheets.get({
           spreadsheetId: state.spreadsheetId,
           fields: 'sheets.properties.title',
         });
 
-        const existingTabs = (spreadsheet.data.sheets || []).map(
+        existingTabs = (spreadsheet.data.sheets || []).map(
           (s) => s.properties?.title || ''
         );
 
         if (existingTabs.includes(fieldsTab)) {
           throw new FillerError('storage_error', `Tab "${fieldsTab}" already exists`);
-        }
-        if (existingTabs.includes(dataTab)) {
-          throw new FillerError('storage_error', `Tab "${dataTab}" already exists`);
         }
       } catch (error) {
         if (error instanceof FillerError) throw error;
@@ -614,23 +665,50 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         throw new FillerError('storage_error', `Failed to read spreadsheet: ${err.message}`);
       }
 
-      // Create both tabs
+      // Resolve first tab as data tab
+      const resolvedDataTab = existingTabs[0];
+      if (!resolvedDataTab) {
+        throw new FillerError('storage_error', 'Spreadsheet has no tabs to use as data source');
+      }
+      dataTab = resolvedDataTab;
+
+      // Read column headers from first tab
+      let columnHeaders: string[];
+      try {
+        const data = await getSheetData(resolvedDataTab);
+        columnHeaders = (data[0] || []).filter((h) => h);
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to read data tab headers: ${err.message}`);
+      }
+
+      const keyField = columnHeaders[0] || config.objectKeyField;
+
+      // Create fields tab only
       try {
         await client.spreadsheets.batchUpdate({
           spreadsheetId: state.spreadsheetId,
           requestBody: {
             requests: [
               { addSheet: { properties: { title: fieldsTab } } },
-              { addSheet: { properties: { title: dataTab } } },
             ],
           },
         });
       } catch (error: unknown) {
         const err = error as { message?: string };
-        throw new FillerError('storage_error', `Failed to create tabs: ${err.message}`);
+        throw new FillerError('storage_error', `Failed to create fields tab: ${err.message}`);
       }
 
-      // Write headers to both tabs
+      // Write field headers + one row per column header
+      const fieldRows = columnHeaders.map((header) => [
+        header, // name
+        '',     // description
+        'false', // auto
+        '',     // instructions
+        'string', // type
+        '',     // example
+      ]);
+
       try {
         await client.spreadsheets.values.batchUpdate({
           spreadsheetId: state.spreadsheetId,
@@ -638,27 +716,25 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
             valueInputOption: 'RAW',
             data: [
               {
-                range: `${fieldsTab}!A1:F1`,
-                values: [FIELD_HEADERS],
-              },
-              {
-                range: `${dataTab}!A1`,
-                values: [[config.objectKeyField]],
+                range: `${fieldsTab}!A1:F${1 + fieldRows.length}`,
+                values: [FIELD_HEADERS, ...fieldRows],
               },
             ],
           },
         });
       } catch (error: unknown) {
         const err = error as { message?: string };
-        throw new FillerError('storage_error', `Failed to write headers: ${err.message}`);
+        throw new FillerError('storage_error', `Failed to write fields: ${err.message}`);
       }
 
-      logger.info('sheets_init', { fieldsTab, dataTab, keyField: config.objectKeyField });
-      return { fieldsTab, dataTab, keyField: config.objectKeyField };
+      logger.info('sheets_init', { fieldsTab, dataTab: resolvedDataTab, keyField });
+      return { fieldsTab, dataTab: resolvedDataTab, keyField };
     },
 
     setSheetId(idOrUrl: string): void {
       state.spreadsheetId = extractSheetIdFromUrl(idOrUrl);
+      // Reset cached data tab so it re-resolves for the new sheet
+      dataTab = config.sheetTabData;
     },
 
     getSheetId(): string {

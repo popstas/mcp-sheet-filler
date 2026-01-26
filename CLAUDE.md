@@ -101,12 +101,12 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 **Fields sheet** - metadata about columns:
 - `name` (required, unique), `description`, `auto` (boolean), `instructions`, `type`, `example`
 
-**Data sheet** - objects as rows, fields as columns:
-- Key field configured via `OBJECT_KEY_FIELD` (default: `name`)
+**Data sheet** - the first existing tab in the spreadsheet is used as the data source (objects as rows, fields as columns):
+- Key field is the first column (configurable via `OBJECT_KEY_FIELD` for display, default: `name`)
 
 ### MCP Tools
 
-1. `filler_init` - initialize spreadsheet by creating data and fields tabs with headers
+1. `filler_init` - create fields tab and populate from first tab's column headers
 2. `filler_add_field` - add a new field
 3. `filler_list_fields` - list all or subset of fields
 4. `filler_get_object_by_name` - get object by name with missing auto fields
@@ -138,7 +138,7 @@ Common:
 
 Google Sheets:
 - `GOOGLE_SHEET_ID` - Google Sheets document ID
-- `SHEET_TAB_DATA` - data tab name (default: `data`)
+- `SHEET_TAB_DATA` - data tab name (default: first tab in the spreadsheet)
 - `SHEET_TAB_FIELDS` - fields tab name (default: `fields`)
 - `GOOGLE_SERVICE_ACCOUNT_KEY` = JSON string or path to service account key file
 

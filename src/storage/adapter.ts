@@ -48,7 +48,7 @@ export function getConfigFromEnv(): StorageConfig {
     resourceUrl: process.env.RESOURCE_URL,
     // Sheets
     googleSheetId: process.env.GOOGLE_SHEET_ID,
-    sheetTabData: process.env.SHEET_TAB_DATA || 'data',
+    sheetTabData: process.env.SHEET_TAB_DATA,
     sheetTabFields: process.env.SHEET_TAB_FIELDS || 'fields',
     googleServiceAccountKey: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
     // OAuth
