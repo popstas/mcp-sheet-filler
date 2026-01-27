@@ -170,4 +170,63 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(tool!.inputSchema.required).toContain('sheet_id');
     });
   });
+
+  describe('resources/list', () => {
+    it('lists the instructions resource', async () => {
+      const result = await client.listResources();
+
+      const resource = result.resources.find((r) => r.uri === 'filler://instructions');
+      expect(resource).toBeDefined();
+      expect(resource!.name).toBe('instructions');
+      expect(resource!.mimeType).toBe('text/plain');
+    });
+  });
+
+  describe('resources/read', () => {
+    it('reads the instructions resource', async () => {
+      const result = await client.readResource({ uri: 'filler://instructions' });
+
+      expect(result.contents).toHaveLength(1);
+      const content = result.contents[0];
+      expect(content.uri).toBe('filler://instructions');
+      const text = 'text' in content ? content.text : '';
+      expect(text).toContain('Sheet Filler');
+      expect(text).toContain('filler_save_object_no_overwrite');
+    });
+  });
+
+  describe('prompts/list', () => {
+    it('lists the fill-sheet prompt', async () => {
+      const result = await client.listPrompts();
+
+      const prompt = result.prompts.find((p) => p.name === 'fill-sheet');
+      expect(prompt).toBeDefined();
+      expect(prompt!.description).toContain('sheet-filling workflow');
+    });
+  });
+
+  describe('prompts/get', () => {
+    it('returns prompt without args (uses get_next_missing_fields_object)', async () => {
+      const result = await client.getPrompt({ name: 'fill-sheet' });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe('user');
+      const text = result.messages[0].content.type === 'text' ? result.messages[0].content.text : '';
+      expect(text).toContain('filler_get_next_missing_fields_object');
+      expect(text).not.toContain('filler_get_object_by_name');
+    });
+
+    it('returns prompt with object_name arg (uses get_object_by_name)', async () => {
+      const result = await client.getPrompt({
+        name: 'fill-sheet',
+        arguments: { object_name: 'Acme Corp' },
+      });
+
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0].role).toBe('user');
+      const text = result.messages[0].content.type === 'text' ? result.messages[0].content.text : '';
+      expect(text).toContain('filler_get_object_by_name');
+      expect(text).toContain('Acme Corp');
+    });
+  });
 });

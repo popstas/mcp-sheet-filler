@@ -1,5 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { z } from 'zod';
+import { z } from 'zod';
 
 import { getConfigFromEnv, type StorageAdapter } from './storage/adapter.js';
 
@@ -144,6 +144,51 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
 };
 
+const INSTRUCTIONS_TEXT = `# Sheet Filler — Usage Instructions
+
+## Setup
+
+1. Open or create a Google Sheet with data rows (objects) and column headers (fields).
+2. Share the sheet with the service account or authenticate via OAuth.
+3. Call \`filler_init\` to create a "fields" tab from the first tab's column headers.
+4. Edit the "fields" tab to set \`auto=TRUE\` for columns the AI should fill, and add \`instructions\` describing how to determine each value.
+
+## Workflow
+
+1. Call \`filler_get_next_missing_fields_object\` to get the first object with empty auto-fill fields.
+2. Read the field instructions for missing fields.
+3. Research or compute the values following those instructions.
+4. Call \`filler_save_object_no_overwrite\` to save values (existing non-empty values are never overwritten).
+5. Repeat from step 1 until no more objects need filling.
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| \`filler_init\` | Create fields tab and populate from first tab's column headers |
+| \`filler_add_field\` | Add a new field to the schema |
+| \`filler_list_fields\` | List all or a subset of fields |
+| \`filler_get_object_by_name\` | Get an object by its name (key field) |
+| \`filler_add_object_by_name\` | Create a new object with just the key |
+| \`filler_save_object_no_overwrite\` | Save values without overwriting non-empty fields |
+| \`filler_get_next_missing_fields_object\` | Get first object with missing auto-fill fields |
+| \`filler_get_missing_auto_fields\` | Get empty auto-fill fields for a specific object |
+| \`filler_use_sheet_id\` | Switch to a different Google Sheet |
+| \`filler_google_auth\` | Authenticate via device code flow |
+
+## Field Properties
+
+Each field has: \`name\` (unique identifier), \`description\`, \`type\` (string, number, date, datetime, url, email, json, or enum:val1|val2|val3), \`auto\` (boolean — whether the AI should fill this field), \`instructions\` (how to determine the value), and \`example\`.
+
+## Save Statuses
+
+When saving values, each field returns one of:
+- \`saved\` — value was written successfully
+- \`skipped_already_set\` — field already had a non-empty value (not overwritten)
+- \`rejected_unknown_field\` — field name not found in schema
+- \`rejected_invalid_type\` — value does not match the field's type
+`;
+
 export async function createAdapter(): Promise<StorageAdapter> {
   const config = getConfigFromEnv();
   logger.info('adapter_config', { objectKeyField: config.objectKeyField });
@@ -201,6 +246,62 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
       }
     );
   }
+
+  // Register instructions resource
+  server.registerResource(
+    'instructions',
+    'filler://instructions',
+    {
+      title: 'Sheet Filler Instructions',
+      description: 'Usage instructions for the sheet-filler MCP server: setup, workflow, available tools, field properties, and save statuses.',
+      mimeType: 'text/plain',
+    },
+    async () => ({
+      contents: [{ uri: 'filler://instructions', text: INSTRUCTIONS_TEXT }],
+    })
+  );
+
+  // Register fill-sheet prompt
+  server.registerPrompt(
+    'fill-sheet',
+    {
+      title: 'Fill Sheet',
+      description: 'Guide the LLM through the sheet-filling workflow. Optionally specify an object name to fill a specific object.',
+      argsSchema: {
+        object_name: z.string().optional().describe('Name of a specific object to fill. If omitted, the next object with missing auto-fill fields is used.'),
+      },
+    },
+    async ({ object_name }) => {
+      const startStep = object_name
+        ? `First, call \`filler_get_object_by_name\` with name "${object_name}" to retrieve the object and its missing auto-fill fields.`
+        : `First, call \`filler_get_next_missing_fields_object\` to get the next object that has empty auto-fill fields.`;
+
+      const text = `You are a sheet-filling assistant. Your job is to fill in missing values for objects in a Google Sheet.
+
+${startStep}
+
+Then follow this loop:
+1. Look at the missing auto-fill fields and their instructions.
+2. For each missing field, research or compute the correct value following the field's instructions.
+3. Call \`filler_save_object_no_overwrite\` with the object name and a map of field names to values.
+4. If there are more objects to fill, call \`filler_get_next_missing_fields_object\` and repeat from step 1.
+5. When no more objects have missing fields, report that all objects are filled.
+
+Important:
+- Always follow the field's \`instructions\` to determine the correct value.
+- Respect field types (string, number, date, url, email, etc.).
+- The save tool will never overwrite existing non-empty values, so you can safely attempt to save all computed values.`;
+
+      return {
+        messages: [
+          {
+            role: 'user' as const,
+            content: { type: 'text' as const, text },
+          },
+        ],
+      };
+    }
+  );
 
   return server;
 }

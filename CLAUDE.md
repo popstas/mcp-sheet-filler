@@ -116,6 +116,14 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 8. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL
 9. `filler_google_auth` - authenticate via device code flow (status, start_auth, complete_auth)
 
+### MCP Resources
+
+- `filler://instructions` — static text resource with usage instructions (setup, workflow, available tools, field properties, save statuses)
+
+### MCP Prompts
+
+- `fill-sheet` — prompt template that guides the LLM through the sheet-filling workflow. Optional `object_name` argument: if provided, starts with `filler_get_object_by_name` for that object; if omitted, starts with `filler_get_next_missing_fields_object`.
+
 ### Type Validation
 
 Supported types: `string`, `number`, `date` (ISO), `datetime` (ISO), `url`, `email`, `json`, `enum:val1|val2|val3`
