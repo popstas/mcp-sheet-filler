@@ -584,7 +584,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       const data = await getSheetData(resolvedDataTab);
       if (data.length === 0) return;
 
-      const headers = data[0];
+      const headers = [...data[0]];
       if (headers.length === 0) return;
 
       // First column is always the key
@@ -609,8 +609,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       const updateData: { range: string; values: (string | number)[][] }[] = [];
 
       for (const [fieldName, value] of Object.entries(values)) {
-        const colIndex = headers.indexOf(fieldName);
-        if (colIndex === -1) continue;
+        let colIndex = headers.indexOf(fieldName);
+        if (colIndex === -1) {
+          colIndex = headers.length;
+          headers.push(fieldName);
+          const colLetter = columnIndexToLetter(colIndex);
+          updateData.push({
+            range: `${resolvedDataTab}!${colLetter}1`,
+            values: [[fieldName]],
+          });
+        }
 
         const colLetter = columnIndexToLetter(colIndex);
         const fieldType = fieldTypeMap.get(fieldName);
