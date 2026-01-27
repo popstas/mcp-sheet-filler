@@ -129,6 +129,14 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   async function resolveDataTab(): Promise<string> {
     if (dataTab) return dataTab;
     const firstTab = await getFirstTabName();
+    if (firstTab === fieldsTab) {
+      throw new FillerError(
+        'storage_error',
+        `First tab "${firstTab}" is the fields metadata tab. ` +
+        `Move your data to a different tab and place it first, ` +
+        `or set SHEET_TAB_DATA to specify the data tab explicitly.`
+      );
+    }
     dataTab = firstTab;
     return firstTab;
   }
