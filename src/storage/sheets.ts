@@ -102,8 +102,17 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   const fieldsTab = config.sheetTabFields || 'fields';
   let dataTab = config.sheetTabData; // undefined means "use first tab"
 
-  // Resolve first tab name from spreadsheet metadata
+  // Cache for first tab name (keyed by spreadsheet ID)
+  let cachedFirstTabName: string | null = null;
+  let cachedFirstTabNameSheetId: string | null = null;
+
+  // Resolve first tab name from spreadsheet metadata (with caching)
   async function getFirstTabName(): Promise<string> {
+    // Return cached value if spreadsheet hasn't changed
+    if (cachedFirstTabName && cachedFirstTabNameSheetId === state.spreadsheetId) {
+      return cachedFirstTabName;
+    }
+
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
@@ -117,7 +126,11 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (tabs.length === 0) {
         throw new FillerError('storage_error', 'Spreadsheet has no tabs');
       }
-      return tabs[0];
+      const firstTab = tabs[0];
+      // Cache the result
+      cachedFirstTabName = firstTab;
+      cachedFirstTabNameSheetId = state.spreadsheetId;
+      return firstTab;
     } catch (error) {
       if (error instanceof FillerError) throw error;
       const err = error as { message?: string };
@@ -374,11 +387,62 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     }
   }
 
-  // Helper to get data headers (first row)
+  // Helper to get only headers (first row) from a sheet
+  async function getSheetHeaders(sheetName: string): Promise<string[]> {
+    await ensureValidTokens();
+    const client = getSheetsClient();
+    try {
+      const response = await client.spreadsheets.values.get({
+        spreadsheetId: state.spreadsheetId,
+        range: `${sheetName}!1:1`, // Only first row
+      });
+      const headers = (response.data.values?.[0] as string[]) || [];
+      logger.debug('sheets_get_headers', { tab: sheetName, headerCount: headers.length });
+      return headers;
+    } catch (error: unknown) {
+      const err = error as { code?: number; message?: string };
+      if (err.code === 404) {
+        throw new FillerError('storage_error', `Sheet "${sheetName}" not found`);
+      }
+      throw new FillerError('storage_error', `Failed to read sheet headers: ${err.message}`);
+    }
+  }
+
+  // Helper to get data headers (first row) - optimized to read only first row
   async function getDataHeaders(): Promise<string[]> {
     const resolvedDataTab = await resolveDataTab();
-    const data = await getSheetData(resolvedDataTab);
-    return data[0] || [];
+    return await getSheetHeaders(resolvedDataTab);
+  }
+
+  // Helper to batch read multiple sheet ranges in a single API call
+  async function batchGetSheetData(ranges: string[]): Promise<Map<string, string[][]>> {
+    await ensureValidTokens();
+    const client = getSheetsClient();
+    try {
+      const response = await client.spreadsheets.values.batchGet({
+        spreadsheetId: state.spreadsheetId,
+        ranges: ranges, // Например: ['Sheet1', 'fields']
+      });
+
+      // Преобразовать в Map: ключ = имя листа, значение = данные
+      const result = new Map<string, string[][]>();
+      if (response.data.valueRanges) {
+        ranges.forEach((range, index) => {
+          // Извлечь имя листа из диапазона (убрать '!' и всё после)
+          const sheetName = range.split('!')[0];
+          const values = (response.data.valueRanges?.[index]?.values as string[][]) || [];
+          result.set(sheetName, values);
+        });
+      }
+      logger.debug('sheets_batch_get_data', { rangeCount: ranges.length, sheets: Array.from(result.keys()) });
+      return result;
+    } catch (error: unknown) {
+      const err = error as { code?: number; message?: string };
+      if (err.code === 404) {
+        throw new FillerError('storage_error', `One or more sheets not found in batch request`);
+      }
+      throw new FillerError('storage_error', `Failed to batch read sheets: ${err.message}`);
+    }
   }
 
   // Helper to find column index by header name
@@ -576,12 +640,30 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       }
     },
 
-    async updateObjectFields(name: string, values: Record<string, string>): Promise<void> {
+    async updateObjectFields(name: string, values: Record<string, string>, providedFields?: Field[]): Promise<void> {
       await ensureValidTokens();
       const client = getSheetsClient();
       logger.debug('sheets_update_object_fields', { name, fields: Object.keys(values) });
       const resolvedDataTab = await resolveDataTab();
-      const data = await getSheetData(resolvedDataTab);
+
+      let data: string[][];
+      let fields: Field[];
+
+      // Use batching if fields are not provided
+      if (!providedFields) {
+        // Batch read both data sheet and fields sheet
+        const batchData = await batchGetSheetData([resolvedDataTab, fieldsTab]);
+        data = batchData.get(resolvedDataTab) || [];
+        const fieldsData = batchData.get(fieldsTab) || [];
+        // Skip header row and convert to Field[]
+        const rows = fieldsData.slice(1);
+        fields = rows.map(rowToField).filter((f) => f.name);
+      } else {
+        // Use provided fields and read only data sheet
+        data = await getSheetData(resolvedDataTab);
+        fields = providedFields;
+      }
+
       if (data.length === 0) return;
 
       const headers = [...data[0]];
@@ -602,7 +684,6 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (rowIndex === -1) return;
 
       // Get field types to convert numbers properly
-      const fields = await adapter.listFields();
       const fieldTypeMap = new Map(fields.map((f) => [f.name, f.type]));
 
       // Update each field
@@ -652,8 +733,119 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     },
 
     async getFieldNames(): Promise<string[]> {
-      const fields = await adapter.listFields();
-      return fields.map((f) => f.name);
+      // Optimized: read only the name column (column A) from fields sheet
+      await ensureValidTokens();
+      const client = getSheetsClient();
+      try {
+        const response = await client.spreadsheets.values.get({
+          spreadsheetId: state.spreadsheetId,
+          range: `${fieldsTab}!A:A`, // Only column A (name column)
+        });
+        const rows = (response.data.values as string[][]) || [];
+        // Skip header row and filter out empty names
+        const names = rows.slice(1).map((row) => row[0]?.trim() || '').filter((name) => name);
+        logger.debug('sheets_get_field_names', { count: names.length });
+        return names;
+      } catch (error: unknown) {
+        // Fallback to full listFields if fields sheet doesn't exist
+        if (error instanceof FillerError && error.message.includes('not found')) {
+          const fields = await adapter.listFields();
+          return fields.map((f) => f.name);
+        }
+        const err = error as { code?: number; message?: string };
+        if (err.code === 404) {
+          throw new FillerError('storage_error', `Sheet "${fieldsTab}" not found`);
+        }
+        throw new FillerError('storage_error', `Failed to read field names: ${err.message}`);
+      }
+    },
+
+    // Batch operations for optimization
+    async getObjectByNameAndFields(name: string): Promise<{ object: DataObject | null; fields: Field[] }> {
+      const resolvedDataTab = await resolveDataTab();
+      // Batch read both data sheet and fields sheet
+      const batchData = await batchGetSheetData([resolvedDataTab, fieldsTab]);
+      const data = batchData.get(resolvedDataTab) || [];
+      const fieldsData = batchData.get(fieldsTab) || [];
+
+      // Parse fields
+      const rows = fieldsData.slice(1);
+      const fields = rows.map(rowToField).filter((f) => f.name);
+
+      // Parse object from data
+      if (data.length === 0) {
+        logger.debug('sheets_get_object_by_name_and_fields', { name, found: false, reason: 'empty_sheet' });
+        return { object: null, fields };
+      }
+
+      const headers = data[0];
+      if (headers.length === 0) {
+        logger.debug('sheets_get_object_by_name_and_fields', { name, found: false, reason: 'no_headers' });
+        return { object: null, fields };
+      }
+
+      // First column is always the key
+      const keyColIndex = 0;
+
+      // Find row with matching key
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        if (row[keyColIndex] === name) {
+          const values: Record<string, string> = {};
+          for (let j = 0; j < headers.length; j++) {
+            if (headers[j] && row[j] !== undefined && row[j] !== '') {
+              values[headers[j]] = row[j];
+            }
+          }
+          logger.debug('sheets_get_object_by_name_and_fields', { name, found: true, fieldCount: Object.keys(values).length });
+          return { object: { name, values }, fields };
+        }
+      }
+
+      logger.debug('sheets_get_object_by_name_and_fields', { name, found: false });
+      return { object: null, fields };
+    },
+
+    async getObjectsAndFields(): Promise<{ objects: DataObject[]; fields: Field[] }> {
+      const resolvedDataTab = await resolveDataTab();
+      // Batch read both data sheet and fields sheet
+      const batchData = await batchGetSheetData([resolvedDataTab, fieldsTab]);
+      const data = batchData.get(resolvedDataTab) || [];
+      const fieldsData = batchData.get(fieldsTab) || [];
+
+      // Parse fields
+      const rows = fieldsData.slice(1);
+      const fields = rows.map(rowToField).filter((f) => f.name);
+
+      // Parse objects from data
+      if (data.length <= 1) {
+        logger.debug('sheets_get_objects_and_fields', { objectCount: 0 });
+        return { objects: [], fields }; // No data rows, only headers
+      }
+
+      const headers = data[0];
+      if (headers.length === 0) {
+        logger.debug('sheets_get_objects_and_fields', { objectCount: 0 });
+        return { objects: [], fields };
+      }
+
+      const objects: DataObject[] = [];
+      for (let i = 1; i < data.length; i++) {
+        const row = data[i];
+        const name = row[0]; // First column is the key
+        if (!name) continue;
+
+        const values: Record<string, string> = {};
+        for (let j = 0; j < headers.length; j++) {
+          if (headers[j] && row[j] !== undefined && row[j] !== '') {
+            values[headers[j]] = row[j];
+          }
+        }
+        objects.push({ name, values });
+      }
+
+      logger.debug('sheets_get_objects_and_fields', { objectCount: objects.length });
+      return { objects, fields };
     },
 
     async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string }> {
@@ -749,8 +941,10 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
     setSheetId(idOrUrl: string): void {
       state.spreadsheetId = extractSheetIdFromUrl(idOrUrl);
-      // Reset cached data tab so it re-resolves for the new sheet
+      // Reset cached data tab and first tab name so they re-resolve for the new sheet
       dataTab = config.sheetTabData;
+      cachedFirstTabName = null;
+      cachedFirstTabNameSheetId = null;
     },
 
     getSheetId(): string {

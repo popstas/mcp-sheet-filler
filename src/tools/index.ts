@@ -51,16 +51,27 @@ export const handlers = {
 
   filler_get_object_by_name: (async (args, adapter) => {
     const { name, include_field_meta } = getObjectByNameSchema.parse(args);
-    const obj = await adapter.getObjectByName(name);
+
+    // Use batch operation if available, otherwise fall back to separate calls
+    let obj: { name: string; values: Record<string, string> } | null;
+    let fields: Field[];
+
+    if (adapter.getObjectByNameAndFields) {
+      const result = await adapter.getObjectByNameAndFields(name);
+      obj = result.object;
+      fields = result.fields;
+    } else {
+      obj = await adapter.getObjectByName(name);
+      fields = await adapter.listFields();
+    }
 
     if (!obj) {
       return { found: false };
     }
 
     // Get list of missing auto fields
-    const fields = await adapter.listFields();
     const autoFields = fields.filter((f) => f.auto === true);
-    const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
+    const missingFields = autoFields.filter((f) => isEmpty(obj!.values[f.name]));
 
     const missing = missingFields.map((f) => {
       if (include_field_meta) {
@@ -105,9 +116,9 @@ export const handlers = {
       throw new FillerError('object_not_found', `Object "${name}" not found`);
     }
 
-    const fieldNames = await adapter.getFieldNames();
-    const knownFieldNames = new Set(fieldNames);
+    // Get fields once and reuse - eliminates duplicate getFieldNames() call
     const fields = await adapter.listFields();
+    const knownFieldNames = new Set(fields.map((f) => f.name));
 
     const { result, valuesToSave } = processSaveValues(
       values,
@@ -117,7 +128,8 @@ export const handlers = {
     );
 
     if (Object.keys(valuesToSave).length > 0) {
-      await adapter.updateObjectFields(name, valuesToSave);
+      // Pass fields to avoid re-reading them in updateObjectFields
+      await adapter.updateObjectFields(name, valuesToSave, fields);
     }
 
     // Summarize results by status
@@ -133,14 +145,24 @@ export const handlers = {
   filler_get_next_missing_fields_object: (async (args, adapter) => {
     const { include_field_meta } = getNextMissingFieldsObjectSchema.parse(args);
 
-    const fields = await adapter.listFields();
+    // Use batch operation if available, otherwise fall back to separate calls
+    let fields: Field[];
+    let objects: { name: string; values: Record<string, string> }[];
+
+    if (adapter.getObjectsAndFields) {
+      const result = await adapter.getObjectsAndFields();
+      fields = result.fields;
+      objects = result.objects;
+    } else {
+      fields = await adapter.listFields();
+      objects = await adapter.listObjects();
+    }
+
     const autoFields = fields.filter((f) => f.auto === true);
 
     if (autoFields.length === 0) {
       return { found: false };
     }
-
-    const objects = await adapter.listObjects();
 
     for (const obj of objects) {
       const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));

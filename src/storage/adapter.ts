@@ -15,7 +15,7 @@ export interface StorageAdapter {
   getObjectByName(name: string): Promise<DataObject | null>;
   listObjects(): Promise<DataObject[]>;
   addObjectByName(name: string): Promise<void>;
-  updateObjectFields(name: string, values: Record<string, string>): Promise<void>;
+  updateObjectFields(name: string, values: Record<string, string>, fields?: Field[]): Promise<void>;
   getFieldNames(): Promise<string[]>;
   // Optional: only implemented by sheets adapter for dynamic sheet switching
   setSheetId?(idOrUrl: string): void;
@@ -24,6 +24,9 @@ export interface StorageAdapter {
   getAuthStatus?(): AuthStatus;
   setOAuthTokens?(tokens: OAuthTokens): void;
   initSheet?(): Promise<{ fieldsTab: string; dataTab: string; keyField: string }>;
+  // Optional: batch operations for optimization (only implemented by sheets adapter)
+  getObjectByNameAndFields?(name: string): Promise<{ object: DataObject | null; fields: Field[] }>;
+  getObjectsAndFields?(): Promise<{ objects: DataObject[]; fields: Field[] }>;
 }
 
 export interface StorageConfig {
