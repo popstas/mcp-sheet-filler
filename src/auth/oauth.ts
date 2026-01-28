@@ -2,7 +2,7 @@ import { OAuth2Client, Credentials } from 'google-auth-library';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../logger.js';
-import { getCurrentUserId, sanitizeUserId } from '../context.js';
+import { getCurrentUserId, sanitizeUserId, getCurrentAccessToken } from '../context.js';
 
 export interface OAuthTokens {
   access_token: string;
@@ -74,8 +74,18 @@ export function loadTokens(tokenPath?: string): OAuthTokens | null {
 
 /**
  * Save tokens to file with secure permissions
+ * In HTTP transport mode (when MCP access token is present), tokens are not saved to disk
+ * to prevent server owner from accessing user tokens.
  */
 export function saveTokens(tokens: OAuthTokens, tokenPath?: string): void {
+  // In HTTP transport mode, MCP access token is used directly - don't save tokens to disk
+  const mcpToken = getCurrentAccessToken();
+  if (mcpToken) {
+    // HTTP transport mode - tokens should not be saved to disk
+    logger.debug('tokens_save_skipped_http_mode', { reason: 'HTTP transport uses MCP access token only' });
+    return;
+  }
+
   const filePath = tokenPath || getDefaultTokenPath();
 
   // Create directory if it doesn't exist

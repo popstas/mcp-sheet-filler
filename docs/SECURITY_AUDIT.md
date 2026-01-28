@@ -62,7 +62,8 @@
 ### 2.4 Authorization
 
 - **Per-user isolation:** `AsyncLocalStorage` plus `getCurrentUserId()`/`getCurrentAccessToken()` separate OAuth and MCP token usage per request.
-- **Token files:** Stored under `~/.config/mcp-sheet-filler/clients/{sanitized_user_id}/tokens.json` with mode `0o600`; parent dirs `0o700`.
+- **HTTP transport:** Tokens are **not stored on the server** to prevent server owner from accessing user tokens. Only MCP access token from Authorization header is used. `filler_google_auth` tool is excluded in HTTP mode.
+- **Stdio transport:** Token files stored under `~/.config/mcp-sheet-filler/clients/{sanitized_user_id}/tokens.json` with mode `0o600`; parent dirs `0o700`. This is safe as tokens are stored locally on the user's machine.
 
 **Finding – Shared `spreadsheetId` in HTTP mode:**  
 `filler_use_sheet_id` updates a **process-wide** `state.spreadsheetId` in the Sheets adapter. In HTTP multi-tenant mode, one user can change the target sheet for all users.  
@@ -75,7 +76,9 @@
 
 - **No-overwrite:** `save_object_no_overwrite` and `processSaveValues` respect non-empty existing values.
 - **Emptyness:** `isEmpty()` treats `null`, `undefined`, and whitespace-only strings as empty; `0`, `false`, `"0"` as non-empty.
-- **OAuth tokens:** Held in memory and on disk with restrictive permissions; not logged.
+- **OAuth tokens:** 
+  - **HTTP transport:** Tokens are not stored on disk or in memory cache. Only MCP access token from request context is used (ephemeral).
+  - **Stdio transport:** Tokens held in memory cache and on disk with restrictive permissions (`0o600`); not logged.
 
 ---
 
@@ -132,6 +135,7 @@
 2. **storage/sheets.ts:** Removed `cacheKey` (first 16 chars of token) from `sheets_client_from_mcp_token` debug log.
 3. **transport/http.ts:** Explicit `express.json({ limit: '100kb' })`.
 4. **Dockerfile:** Non-root user `app` (addgroup/adduser), `chown -R app:app /app`, `USER app`.
+5. **HTTP transport security:** Tokens are not stored on server in HTTP mode. `getUserAuth()` skips loading tokens from disk when MCP access token is present. `saveTokens()` skips saving tokens when MCP access token is present. This prevents server owner from accessing user tokens.
 
 ---
 

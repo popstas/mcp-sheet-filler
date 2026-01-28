@@ -251,6 +251,8 @@ The server supports per-client authentication isolation using `AsyncLocalStorage
 
 **Token Storage:**
 
+- **HTTP transport:** Tokens are **not stored on the server**. Only MCP access token from Authorization header is used (ephemeral, per-request). This prevents server owner from accessing user tokens.
+- **Stdio transport:** Tokens stored locally on user's machine:
 ```
 ~/.config/mcp-sheet-filler/
 ├── tokens.json                    # Legacy/default user tokens (stdio)
@@ -280,5 +282,6 @@ Claude Desktop (`claude_desktop_config.json`):
 - All HTTP requests to `/mcp` require a valid Google OAuth access token
 - Token audience must match the server's OAuth client ID
 - User identity is cryptographically verified via Google
-- Each client's Google Sheets tokens stored in separate file with `0600` permissions
+- **HTTP transport:** Tokens are not stored on the server (neither on disk nor in persistent memory cache). Only MCP access token from Authorization header is used, preventing server owner from accessing user tokens.
+- **Stdio transport:** Each client's Google Sheets tokens stored in separate file with `0600` permissions (local storage only)
 - Clients cannot access other clients' tokens through the API

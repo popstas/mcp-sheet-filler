@@ -222,16 +222,25 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   /**
    * Get or create OAuth client for current user from context
+   * In HTTP transport mode (when MCP access token is present), tokens are not loaded from disk
+   * to prevent server owner from accessing user tokens.
    */
   function getUserAuth(): UserAuthState | null {
     const userId = getCurrentUserId();
+
+    // In HTTP transport mode, MCP access token is used directly - don't load tokens from disk
+    const mcpToken = getCurrentAccessToken();
+    if (mcpToken) {
+      // HTTP transport mode - tokens should not be loaded from disk
+      return null;
+    }
 
     // Check cache first
     if (userAuthCache.has(userId)) {
       return userAuthCache.get(userId)!;
     }
 
-    // Try to load tokens for this user
+    // Try to load tokens for this user (stdio transport mode only)
     if (config.googleOAuthClientId && config.googleOAuthClientSecret) {
       const tokenPath = getUserTokenPath(userId);
       const tokens = loadTokens(tokenPath);
