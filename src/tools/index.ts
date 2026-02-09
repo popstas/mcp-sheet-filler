@@ -212,40 +212,55 @@ export const handlers = {
     const autoFields = fields.filter((f) => f.auto === true);
 
     if (autoFields.length === 0) {
-      return { found: false };
+      return { found: false, count: 0, remain: 0 };
     }
+
+    let firstMatch: { object: { name: string; values: Record<string, string> }; missing: Array<{ name: string; type?: string; example?: string; instructions?: string }> } | null = null;
+    let count = 0;
 
     for (const obj of objects) {
       const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
 
       if (missingFields.length > 0) {
-        const missing = missingFields.map((f) => {
-          if (include_field_meta) {
-            return {
-              name: f.name,
-              type: f.type,
-              example: f.example,
-              instructions: f.instructions,
-            };
-          }
-          return { name: f.name };
-        });
+        count++;
 
-        return {
-          found: true,
-          object: obj,
-          missing,
-        };
+        if (!firstMatch) {
+          const missing = missingFields.map((f) => {
+            if (include_field_meta) {
+              return {
+                name: f.name,
+                type: f.type,
+                example: f.example,
+                instructions: f.instructions,
+              };
+            }
+            return { name: f.name };
+          });
+
+          firstMatch = { object: obj, missing };
+        }
       }
     }
 
-    return { found: false };
+    if (firstMatch) {
+      return {
+        found: true,
+        object: firstMatch.object,
+        missing: firstMatch.missing,
+        count,
+        remain: count - 1,
+      };
+    }
+
+    return { found: false, count: 0, remain: 0 };
   }) as ToolHandler<
     unknown,
     {
       found: boolean;
       object?: { name: string; values: Record<string, string> };
       missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+      count: number;
+      remain: number;
     }
   >,
 
@@ -267,7 +282,7 @@ export const handlers = {
     const autoFields = fields.filter((f) => f.auto === true);
 
     if (autoFields.length === 0) {
-      return { found: false, objects: [] };
+      return { found: false, objects: [], count: 0, remain: 0 };
     }
 
     const collected: Array<{
@@ -275,31 +290,37 @@ export const handlers = {
       missing: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
     }> = [];
 
-    for (const obj of objects) {
-      if (collected.length >= limit) break;
+    let count = 0;
 
+    for (const obj of objects) {
       const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
 
       if (missingFields.length > 0) {
-        const missing = missingFields.map((f) => {
-          if (include_field_meta) {
-            return {
-              name: f.name,
-              type: f.type,
-              example: f.example,
-              instructions: f.instructions,
-            };
-          }
-          return { name: f.name };
-        });
+        count++;
 
-        collected.push({ object: obj, missing });
+        if (collected.length < limit) {
+          const missing = missingFields.map((f) => {
+            if (include_field_meta) {
+              return {
+                name: f.name,
+                type: f.type,
+                example: f.example,
+                instructions: f.instructions,
+              };
+            }
+            return { name: f.name };
+          });
+
+          collected.push({ object: obj, missing });
+        }
       }
     }
 
     return {
       found: collected.length > 0,
       objects: collected,
+      count,
+      remain: count - collected.length,
     };
   }) as ToolHandler<
     unknown,
@@ -309,6 +330,8 @@ export const handlers = {
         object: { name: string; values: Record<string, string> };
         missing: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
       }>;
+      count: number;
+      remain: number;
     }
   >,
 

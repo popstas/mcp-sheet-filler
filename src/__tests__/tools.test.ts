@@ -425,6 +425,43 @@ describe('Tool Handlers', () => {
       expect(result.found).toBe(true);
       expect(result.missing?.[0]).toEqual({ name: 'email' });
     });
+
+    it('returns count and remain for multiple unfilled objects', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.addObjectByName('obj2');
+      await adapter.addObjectByName('obj3');
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(true);
+      expect(result.object?.name).toBe('obj1');
+      expect(result.count).toBe(3);
+      expect(result.remain).toBe(2);
+    });
+
+    it('returns count=1 remain=0 when only one unfilled object', async () => {
+      await adapter.addObjectByName('filled');
+      await adapter.updateObjectFields('filled', { email: 'a@b.com', website: 'https://example.com' });
+      await adapter.addObjectByName('unfilled');
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(true);
+      expect(result.object?.name).toBe('unfilled');
+      expect(result.count).toBe(1);
+      expect(result.remain).toBe(0);
+    });
+
+    it('returns count=0 remain=0 when none unfilled', async () => {
+      await adapter.addObjectByName('filled');
+      await adapter.updateObjectFields('filled', { email: 'a@b.com', website: 'https://example.com' });
+
+      const result = await handlers.filler_get_next_missing_fields_object({}, adapter);
+
+      expect(result.found).toBe(false);
+      expect(result.count).toBe(0);
+      expect(result.remain).toBe(0);
+    });
   });
 
   describe('filler_get_next_missing_fields_objects', () => {
@@ -519,6 +556,42 @@ describe('Tool Handlers', () => {
       expect(result.found).toBe(true);
       expect(result.objects).toHaveLength(1);
       expect(result.objects[0].object.name).toBe('unfilled');
+    });
+
+    it('returns count and remain when more unfilled than limit', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.addObjectByName('obj2');
+      await adapter.addObjectByName('obj3');
+      await adapter.addObjectByName('obj4');
+      await adapter.addObjectByName('obj5');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 2 },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects).toHaveLength(2);
+      expect(result.count).toBe(5);
+      expect(result.remain).toBe(3);
+    });
+
+    it('returns count=0 remain=0 when none unfilled', async () => {
+      await adapter.addObjectByName('filled');
+      await adapter.updateObjectFields('filled', {
+        email: 'a@b.com',
+        website: 'https://example.com',
+      });
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5 },
+        adapter
+      );
+
+      expect(result.found).toBe(false);
+      expect(result.objects).toHaveLength(0);
+      expect(result.count).toBe(0);
+      expect(result.remain).toBe(0);
     });
   });
 
