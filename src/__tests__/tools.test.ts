@@ -359,22 +359,18 @@ describe('Tool Handlers', () => {
       expect(result.keyField).toBe('name');
     });
 
-    it('propagates storage_error when tabs already exist', async () => {
+    it('returns success with message when fields tab already exists', async () => {
       const mockAdapter: StorageAdapter = {
         ...adapter,
         async initSheet() {
-          throw new FillerError('storage_error', 'Tab "fields" already exists');
+          return { fieldsTab: 'fields', dataTab: 'Sheet1', keyField: 'name', alreadyExists: true };
         },
       };
 
-      await expect(handlers.filler_init({}, mockAdapter)).rejects.toThrow(FillerError);
+      const result = await handlers.filler_init({}, mockAdapter);
 
-      try {
-        await handlers.filler_init({}, mockAdapter);
-      } catch (error) {
-        expect((error as FillerError).code).toBe('storage_error');
-        expect((error as FillerError).message).toContain('already exists');
-      }
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('already exists');
     });
   });
 

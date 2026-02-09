@@ -874,7 +874,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         );
 
         if (existingTabs.includes(fieldsTab)) {
-          throw new FillerError('storage_error', `Tab "${fieldsTab}" already exists`);
+          const resolvedDataTab = existingTabs[0] || '';
+          return { fieldsTab, dataTab: resolvedDataTab, keyField, alreadyExists: true };
         }
       } catch (error) {
         if (error instanceof FillerError) throw error;

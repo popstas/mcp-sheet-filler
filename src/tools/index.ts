@@ -313,11 +313,15 @@ export const handlers = {
       );
     }
 
-    const { fieldsTab, dataTab, keyField } = await adapter.initSheet();
-    logger.info('tool_init_success', { fieldsTab, dataTab, keyField });
+    const { fieldsTab, dataTab, keyField, alreadyExists } = await adapter.initSheet();
+    logger.info('tool_init_success', { fieldsTab, dataTab, keyField, alreadyExists });
+
+    if (alreadyExists) {
+      return { success: true, fieldsTab, dataTab, keyField, message: `Tab "${fieldsTab}" already exists` };
+    }
 
     return { success: true, fieldsTab, dataTab, keyField };
-  }) as ToolHandler<unknown, { success: boolean; fieldsTab: string; dataTab: string; keyField: string }>,
+  }) as ToolHandler<unknown, { success: boolean; fieldsTab: string; dataTab: string; keyField: string; message?: string }>,
 };
 
 export type ToolName = keyof typeof handlers;
