@@ -111,6 +111,7 @@ export async function startHttpServer(): Promise<void> {
 
   const app = express();
   app.use(express.json({ limit: '100kb' }));
+  app.use(express.urlencoded({ extended: false }));
 
   // Health check endpoint (no auth required)
   app.get('/health', (_req: Request, res: Response) => {
