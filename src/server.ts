@@ -24,7 +24,9 @@ import {
   getObjectByNameSchema,
   addObjectByNameSchema,
   saveObjectNoOverwriteSchema,
+  saveObjectsNoOverwriteSchema,
   getNextMissingFieldsObjectSchema,
+  getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
   googleAuthSchema,
   initSheetSchema,
@@ -99,11 +101,32 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       openWorldHint: true,
     },
   },
+  filler_save_objects_no_overwrite: {
+    description: 'Save field values for multiple objects at once without overwriting existing non-empty values',
+    inputSchema: saveObjectsNoOverwriteSchema,
+    annotations: {
+      title: 'Save Objects Batch (No Overwrite)',
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  },
   filler_get_next_missing_fields_object: {
     description: 'Get the first object that has missing auto-fill fields',
     inputSchema: getNextMissingFieldsObjectSchema,
     annotations: {
       title: 'Get Next Object with Missing Fields',
+      readOnlyHint: true,
+      destructiveHint: false,
+      openWorldHint: true,
+    },
+  },
+  filler_get_next_missing_fields_objects: {
+    description: 'Get multiple objects that have missing auto-fill fields (batch version)',
+    inputSchema: getNextMissingFieldsObjectsSchema,
+    annotations: {
+      title: 'Get Next Objects with Missing Fields (Batch)',
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: true,
@@ -171,7 +194,9 @@ const INSTRUCTIONS_TEXT = `# Sheet Filler — Usage Instructions
 | \`filler_get_object_by_name\` | Get an object by its name (key field) |
 | \`filler_add_object_by_name\` | Create a new object with just the key |
 | \`filler_save_object_no_overwrite\` | Save values without overwriting non-empty fields |
+| \`filler_save_objects_no_overwrite\` | Save values for multiple objects at once (batch) |
 | \`filler_get_next_missing_fields_object\` | Get first object with missing auto-fill fields |
+| \`filler_get_next_missing_fields_objects\` | Get multiple objects with missing auto-fill fields (batch) |
 | \`filler_get_missing_auto_fields\` | Get empty auto-fill fields for a specific object |
 | \`filler_use_sheet_id\` | Switch to a different Google Sheet |
 | \`filler_google_auth\` | Authenticate via device code flow |

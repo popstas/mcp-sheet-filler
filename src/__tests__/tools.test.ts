@@ -277,6 +277,103 @@ describe('Tool Handlers', () => {
     });
   });
 
+  describe('filler_save_objects_no_overwrite', () => {
+    beforeEach(async () => {
+      await adapter.addObjectByName('acme');
+      await adapter.updateObjectFields('acme', { email: 'existing@acme.com' });
+      await adapter.addObjectByName('globex');
+    });
+
+    it('saves values for multiple objects', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'acme', values: { website: 'https://acme.com' } },
+            { name: 'globex', values: { email: 'info@globex.com', website: 'https://globex.com' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.acme).toEqual({ website: 'saved' });
+      expect(result.results.globex).toEqual({ email: 'saved', website: 'saved' });
+
+      const acme = await adapter.getObjectByName('acme');
+      expect(acme?.values.website).toBe('https://acme.com');
+      const globex = await adapter.getObjectByName('globex');
+      expect(globex?.values.email).toBe('info@globex.com');
+    });
+
+    it('handles non-existent object gracefully', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'acme', values: { website: 'https://acme.com' } },
+            { name: 'nonexistent', values: { email: 'test@test.com' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.acme).toEqual({ website: 'saved' });
+      expect(result.results.nonexistent).toEqual({ error: 'Object "nonexistent" not found' });
+    });
+
+    it('skips already-set values across objects', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'acme', values: { email: 'new@acme.com' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.acme).toEqual({ email: 'skipped_already_set' });
+      const acme = await adapter.getObjectByName('acme');
+      expect(acme?.values.email).toBe('existing@acme.com');
+    });
+
+    it('rejects unknown fields and invalid types', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'globex', values: { unknown: 'val', website: 'not a url' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.globex).toEqual({
+        unknown: 'rejected_unknown_field',
+        website: 'rejected_invalid_type',
+      });
+    });
+
+    it('handles mixed results across objects', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'acme', values: { email: 'new@acme.com', website: 'https://acme.com' } },
+            { name: 'nonexistent', values: { email: 'x@x.com' } },
+            { name: 'globex', values: { age: 'not a number', email: 'info@globex.com' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.acme).toEqual({
+        email: 'skipped_already_set',
+        website: 'saved',
+      });
+      expect(result.results.nonexistent).toEqual({ error: 'Object "nonexistent" not found' });
+      expect(result.results.globex).toEqual({
+        age: 'rejected_invalid_type',
+        email: 'saved',
+      });
+    });
+  });
+
   describe('filler_get_next_missing_fields_object', () => {
     it('returns first object with missing auto fields', async () => {
       await adapter.addObjectByName('obj1');
@@ -327,6 +424,101 @@ describe('Tool Handlers', () => {
 
       expect(result.found).toBe(true);
       expect(result.missing?.[0]).toEqual({ name: 'email' });
+    });
+  });
+
+  describe('filler_get_next_missing_fields_objects', () => {
+    it('returns multiple objects up to limit', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.addObjectByName('obj2');
+      await adapter.addObjectByName('obj3');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 2 },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects).toHaveLength(2);
+      expect(result.objects[0].object.name).toBe('obj1');
+      expect(result.objects[1].object.name).toBe('obj2');
+    });
+
+    it('returns fewer than limit when not enough objects', async () => {
+      await adapter.addObjectByName('obj1');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5 },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects).toHaveLength(1);
+      expect(result.objects[0].object.name).toBe('obj1');
+      expect(result.objects[0].missing.length).toBeGreaterThan(0);
+    });
+
+    it('returns found=false when no missing fields', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.updateObjectFields('obj1', {
+        email: 'a@b.com',
+        website: 'https://example.com',
+      });
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5 },
+        adapter
+      );
+
+      expect(result.found).toBe(false);
+      expect(result.objects).toHaveLength(0);
+    });
+
+    it('returns found=false when no auto fields exist', async () => {
+      // Create adapter with no auto fields
+      const plainAdapter = createMockAdapter('name');
+      await plainAdapter.addField({ name: 'name', type: 'string' });
+      await plainAdapter.addField({ name: 'manual', type: 'string' });
+      await plainAdapter.addObjectByName('obj1');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5 },
+        plainAdapter
+      );
+
+      expect(result.found).toBe(false);
+      expect(result.objects).toHaveLength(0);
+    });
+
+    it('respects include_field_meta=false', async () => {
+      await adapter.addObjectByName('obj1');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5, include_field_meta: false },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects[0].missing[0]).toEqual({ name: 'email' });
+      expect(result.objects[0].missing[0]).not.toHaveProperty('instructions');
+    });
+
+    it('skips objects with all auto fields filled', async () => {
+      await adapter.addObjectByName('filled');
+      await adapter.updateObjectFields('filled', {
+        email: 'a@b.com',
+        website: 'https://example.com',
+      });
+      await adapter.addObjectByName('unfilled');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 5 },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects).toHaveLength(1);
+      expect(result.objects[0].object.name).toBe('unfilled');
     });
   });
 

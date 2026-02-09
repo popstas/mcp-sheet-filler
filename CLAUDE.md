@@ -112,9 +112,11 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 4. `filler_get_object_by_name` - get object by name with missing auto fields
 5. `filler_add_object_by_name` - create object with just the key
 6. `filler_save_object_no_overwrite` - save values without overwriting non-empty fields
-7. `filler_get_next_missing_fields_object` - get first object with missing auto-fill fields
-8. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL
-9. `filler_google_auth` - authenticate via device code flow (status, start_auth, complete_auth)
+7. `filler_save_objects_no_overwrite` - save values for multiple objects at once (batch)
+8. `filler_get_next_missing_fields_object` - get first object with missing auto-fill fields
+9. `filler_get_next_missing_fields_objects` - get multiple objects with missing auto-fill fields (batch)
+10. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL
+11. `filler_google_auth` - authenticate via device code flow (status, start_auth, complete_auth)
 
 ### MCP Resources
 

@@ -9,7 +9,9 @@ import {
   getObjectByNameSchema,
   addObjectByNameSchema,
   saveObjectNoOverwriteSchema,
+  saveObjectsNoOverwriteSchema,
   getNextMissingFieldsObjectSchema,
+  getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
   googleAuthSchema,
   initSheetSchema,
@@ -142,6 +144,55 @@ export const handlers = {
     return { result };
   }) as ToolHandler<unknown, { result: Record<string, SaveStatus> }>,
 
+  filler_save_objects_no_overwrite: (async (args, adapter) => {
+    const { objects: inputObjects } = saveObjectsNoOverwriteSchema.parse(args);
+
+    // Fetch fields once for all objects
+    const fields = await adapter.listFields();
+    const knownFieldNames = new Set(fields.map((f) => f.name));
+
+    // Fetch all objects once
+    let allObjects: { name: string; values: Record<string, string> }[];
+    if (adapter.getObjectsAndFields) {
+      const data = await adapter.getObjectsAndFields();
+      allObjects = data.objects;
+    } else {
+      allObjects = await adapter.listObjects();
+    }
+    const objectMap = new Map(allObjects.map((o) => [o.name, o]));
+
+    const results: Record<string, Record<string, SaveStatus> | { error: string }> = {};
+
+    for (const { name, values } of inputObjects) {
+      const obj = objectMap.get(name);
+      if (!obj) {
+        results[name] = { error: `Object "${name}" not found` };
+        continue;
+      }
+
+      const { result, valuesToSave } = processSaveValues(
+        values,
+        obj.values,
+        fields,
+        knownFieldNames
+      );
+
+      if (Object.keys(valuesToSave).length > 0) {
+        await adapter.updateObjectFields(name, valuesToSave, fields);
+        // Update local copy so subsequent saves for same object see new values
+        Object.assign(obj.values, valuesToSave);
+      }
+
+      results[name] = result;
+    }
+
+    logger.info('tool_save_objects_result', { count: inputObjects.length });
+    return { results };
+  }) as ToolHandler<
+    unknown,
+    { results: Record<string, Record<string, SaveStatus> | { error: string }> }
+  >,
+
   filler_get_next_missing_fields_object: (async (args, adapter) => {
     const { include_field_meta } = getNextMissingFieldsObjectSchema.parse(args);
 
@@ -195,6 +246,69 @@ export const handlers = {
       found: boolean;
       object?: { name: string; values: Record<string, string> };
       missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+    }
+  >,
+
+  filler_get_next_missing_fields_objects: (async (args, adapter) => {
+    const { limit, include_field_meta } = getNextMissingFieldsObjectsSchema.parse(args);
+
+    let fields: Field[];
+    let objects: { name: string; values: Record<string, string> }[];
+
+    if (adapter.getObjectsAndFields) {
+      const result = await adapter.getObjectsAndFields();
+      fields = result.fields;
+      objects = result.objects;
+    } else {
+      fields = await adapter.listFields();
+      objects = await adapter.listObjects();
+    }
+
+    const autoFields = fields.filter((f) => f.auto === true);
+
+    if (autoFields.length === 0) {
+      return { found: false, objects: [] };
+    }
+
+    const collected: Array<{
+      object: { name: string; values: Record<string, string> };
+      missing: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+    }> = [];
+
+    for (const obj of objects) {
+      if (collected.length >= limit) break;
+
+      const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
+
+      if (missingFields.length > 0) {
+        const missing = missingFields.map((f) => {
+          if (include_field_meta) {
+            return {
+              name: f.name,
+              type: f.type,
+              example: f.example,
+              instructions: f.instructions,
+            };
+          }
+          return { name: f.name };
+        });
+
+        collected.push({ object: obj, missing });
+      }
+    }
+
+    return {
+      found: collected.length > 0,
+      objects: collected,
+    };
+  }) as ToolHandler<
+    unknown,
+    {
+      found: boolean;
+      objects: Array<{
+        object: { name: string; values: Record<string, string> };
+        missing: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+      }>;
     }
   >,
 
