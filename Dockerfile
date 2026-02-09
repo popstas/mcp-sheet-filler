@@ -2,6 +2,8 @@
 FROM node:24-alpine AS builder
 WORKDIR /app
 
+RUN apk add --no-cache python3 make g++
+
 COPY package*.json ./
 RUN npm ci
 
@@ -16,14 +18,20 @@ ENV TRANSPORT=http \
     HOST=0.0.0.0 \
     NODE_ENV=production
 
+# Install build tools for native modules (better-sqlite3), then clean up after npm ci
+RUN apk add --no-cache python3 make g++
+
 # Prep app dir with node ownership to avoid a full tree chown later.
 RUN mkdir -p /app && chown node:node /app
 WORKDIR /app
 USER node
 
-# Ставим prod deps
 COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+
+USER root
+RUN apk del python3 make g++
+USER node
 
 # Копируем билд и сразу выставляем владельца на node
 COPY --from=builder --chown=node:node /app/dist ./dist

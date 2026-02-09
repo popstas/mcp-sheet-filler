@@ -10,6 +10,7 @@ import type {
   PendingAuthorization,
   StoredRefreshToken,
 } from './types.js';
+import { openAuthDb, SqliteMap } from './store.js';
 
 const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -22,11 +23,14 @@ const GOOGLE_SCOPES = [
 const AUTH_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
-// In-memory stores
-export const registeredClients = new Map<string, RegisteredClient>();
+// Persistent stores (SQLite-backed, configurable via AUTH_DB_PATH)
+const authDb = openAuthDb(process.env.AUTH_DB_PATH || ':memory:');
+export const registeredClients = new SqliteMap<RegisteredClient>(authDb, 'registered_clients');
+export const refreshTokens = new SqliteMap<StoredRefreshToken>(authDb, 'refresh_tokens');
+
+// Ephemeral stores (in-memory, single-use with 10-min TTL)
 export const pendingGoogleAuths = new Map<string, PendingGoogleAuth>();
 export const pendingAuthorizations = new Map<string, PendingAuthorization>();
-export const refreshTokens = new Map<string, StoredRefreshToken>();
 
 /**
  * Generate RFC 8414 Authorization Server Metadata.

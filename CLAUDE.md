@@ -145,6 +145,7 @@ Common:
 - `PORT` = HTTP server port (default: `3000`)
 - `HOST` = HTTP bind address (default: `0.0.0.0`)
 - `RESOURCE_URL` = public URL of this server (required for HTTP transport)
+- `AUTH_DB_PATH` = path to SQLite database for OAuth persistence (default: `:memory:`)
 
 Google Sheets:
 - `GOOGLE_SHEET_ID` - Google Sheets document ID
@@ -177,6 +178,7 @@ src/
 │   ├── cli.ts            # CLI entry point for `npm run auth`
 │   ├── metadata.ts       # RFC 9728 Protected Resource Metadata generation
 │   ├── oauth.ts          # OAuth device code flow, token management
+│   ├── store.ts          # SqliteMap class + openAuthDb for OAuth persistence
 │   ├── token-validator.ts # Google access token validation
 │   └── types.ts          # Auth-related type definitions
 ├── storage/

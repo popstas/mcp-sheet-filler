@@ -191,7 +191,7 @@ Response:
 
 ## Configuration
 
-No new environment variables are needed. The authorization server reuses the existing HTTP transport config:
+The authorization server reuses the existing HTTP transport config, plus one optional variable for persistence:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -199,6 +199,7 @@ No new environment variables are needed. The authorization server reuses the exi
 | `GOOGLE_OAUTH_CLIENT_ID` | Yes | Google OAuth 2.0 client ID. Used for both client audience validation and Google consent. |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Yes | Google OAuth 2.0 client secret. Used for Google token exchange. |
 | `TRANSPORT` | Yes | Must be `http` to enable the authorization server. |
+| `AUTH_DB_PATH` | No | Path to SQLite database file for OAuth persistence. Default: `:memory:` (no persistence). Set to a file path (e.g., `data/auth.db`) to survive restarts. |
 
 ### Google Cloud Console Setup
 
@@ -208,16 +209,16 @@ Your OAuth client in Google Cloud Console must be configured as a **Web applicat
 
 Example: if `RESOURCE_URL=https://mcp.example.com`, add `https://mcp.example.com/auth/callback`.
 
-## In-Memory State
+## State Storage
 
-All authorization state is stored in memory. A server restart clears:
+| Store | Contents | TTL | Storage |
+|-------|----------|-----|---------|
+| `registeredClients` | DCR-registered client credentials | None | SQLite (configurable via `AUTH_DB_PATH`) |
+| `refreshTokens` | Our opaque token mapped to Google refresh token | None | SQLite (configurable via `AUTH_DB_PATH`) |
+| `pendingGoogleAuths` | State between `/auth` redirect and `/auth/callback` | 10 minutes | In-memory |
+| `pendingAuthorizations` | Authorization codes awaiting token exchange | 10 minutes | In-memory |
 
-| Store | Contents | TTL |
-|-------|----------|-----|
-| `registeredClients` | DCR-registered client credentials | None (persists until restart) |
-| `pendingGoogleAuths` | State between `/auth` redirect and `/auth/callback` | 10 minutes |
-| `pendingAuthorizations` | Authorization codes awaiting token exchange | 10 minutes |
-| `refreshTokens` | Our opaque token mapped to Google refresh token | None (persists until restart) |
+By default (`AUTH_DB_PATH` unset or `:memory:`), all stores are in-memory and a server restart clears everything. Set `AUTH_DB_PATH` to a file path to persist `registeredClients` and `refreshTokens` across restarts.
 
 A cleanup job runs every 5 minutes to remove expired `pendingGoogleAuths` and `pendingAuthorizations` entries.
 
@@ -229,7 +230,7 @@ stateDiagram-v2
     PendingAuthorization --> RefreshToken: POST /auth/token (code)
     PendingAuthorization --> [*]: expired (10 min)
     RefreshToken --> RefreshToken: POST /auth/token (refresh)
-    RefreshToken --> [*]: server restart
+    RefreshToken --> [*]: persisted (if AUTH_DB_PATH set)
 ```
 
 ## Security
@@ -241,7 +242,7 @@ stateDiagram-v2
 - **Client credentials** validated on every token request
 - **Redirect URI** must exactly match the URI registered during DCR
 - **Refresh token isolation** -- each refresh token is bound to the client that created it
-- **No disk persistence** in HTTP mode -- all state is in-memory only
+- **SQLite persistence** optional via `AUTH_DB_PATH` -- only stores client registrations and refresh token mappings; ephemeral auth state remains in-memory
 
 ## Verification
 

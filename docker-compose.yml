@@ -16,6 +16,7 @@ services:
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
       - GOOGLE_OAUTH_TOKEN_PATH=/data/tokens.json
+      - AUTH_DB_PATH=/data/auth.db
     volumes:
       # For OAuth token persistence
       - filler-data:/data

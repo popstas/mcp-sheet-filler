@@ -13,6 +13,7 @@ This guide covers deploying the MCP Sheet Filler server in HTTP mode and connect
    GOOGLE_OAUTH_CLIENT_SECRET=xxx
    GOOGLE_SHEET_ID=xxx                        # Your Google Sheet ID
    TRANSPORT=http
+   AUTH_DB_PATH=data/auth.db                  # Optional: persist OAuth state across restarts
    ```
 
 ## Starting the Server
@@ -30,6 +31,8 @@ docker run -p 3000:3000 \
   -e GOOGLE_SHEET_ID=your-sheet-id \
   -e GOOGLE_OAUTH_CLIENT_ID=your-client-id \
   -e GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret \
+  -e AUTH_DB_PATH=/data/auth.db \
+  -v filler-data:/data \
   mcp-sheet-filler
 ```
 
