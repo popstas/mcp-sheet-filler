@@ -9,6 +9,8 @@ import { getConfigFromEnv } from '../storage/adapter.js';
 import type { AuthConfig } from '../auth/types.js';
 import { generateProtectedResourceMetadata, getMetadataUrl } from '../auth/metadata.js';
 import { validateGoogleToken } from '../auth/token-validator.js';
+import { createAuthorizationServerRouter } from '../auth/authorization-server-routes.js';
+import { cleanupExpired } from '../auth/authorization-server.js';
 
 /**
  * Get auth configuration from environment.
@@ -121,6 +123,13 @@ export async function startHttpServer(): Promise<void> {
     res.json(metadata);
   });
 
+  // OAuth Authorization Server routes (DCR, authorize, callback, token)
+  const authRouter = createAuthorizationServerRouter(authConfig);
+  app.use(authRouter);
+
+  // Periodic cleanup of expired authorization entries (every 5 minutes)
+  const cleanupInterval = setInterval(cleanupExpired, 5 * 60 * 1000);
+
   // MCP endpoint: GET (SSE stream), POST (JSON-RPC), DELETE (session teardown)
   app.all('/mcp', async (req: Request, res: Response) => {
     // Authenticate the request
@@ -230,11 +239,14 @@ export async function startHttpServer(): Promise<void> {
     console.log(`Health check: http://${host}:${port}/health`);
     console.log(`MCP endpoint: http://${host}:${port}/mcp`);
     console.log(`Protected Resource Metadata: ${authConfig.resourceUrl}/.well-known/oauth-protected-resource`);
+    console.log(`Authorization Server Metadata: ${authConfig.resourceUrl}/.well-known/oauth-authorization-server`);
+    console.log(`Client Registration: ${authConfig.resourceUrl}/auth/register`);
   });
 
   // Graceful shutdown
   const shutdown = () => {
     console.log('\nShutting down...');
+    clearInterval(cleanupInterval);
     httpServer.close(() => {
       logger.info('server_stopped', { transport: 'http' });
       process.exit(0);

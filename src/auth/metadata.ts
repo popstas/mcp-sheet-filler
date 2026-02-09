@@ -10,7 +10,7 @@ export const GOOGLE_AUTHORIZATION_SERVER = 'https://accounts.google.com';
 export function generateProtectedResourceMetadata(config: AuthConfig): ProtectedResourceMetadata {
   return {
     resource: config.resourceUrl,
-    authorization_servers: [GOOGLE_AUTHORIZATION_SERVER],
+    authorization_servers: [config.resourceUrl],
     bearer_methods_supported: ['header'],
     scopes_supported: [
       'openid',
