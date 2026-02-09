@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, { type Request, type Response } from 'express';
 import { createAdapter, createServer } from '../server.js';
@@ -101,8 +102,10 @@ export async function startHttpServer(): Promise<void> {
   }
 
   const adapter = await createAdapter();
-  // Exclude filler_google_auth in HTTP mode - auth is handled via Authorization header
-  const server = createServer(adapter, ['filler_google_auth']);
+  const disableSession = !!process.env.DISABLE_SESSION_ID;
+
+  // Session store: session ID -> transport (only used when sessions are enabled)
+  const sessions = new Map<string, StreamableHTTPServerTransport>();
 
   const app = express();
   app.use(express.json({ limit: '100kb' }));
@@ -126,24 +129,86 @@ export async function startHttpServer(): Promise<void> {
       return; // 401 already sent
     }
 
-    logger.debug('http_request_user', { userId: auth.userId, email: auth.email });
+    const sessionId = req.headers['mcp-session-id'] as string | undefined;
+    logger.debug('http_request', {
+      method: req.method,
+      userId: auth.userId,
+      email: auth.email,
+      sessionId,
+      body: req.method === 'POST' ? req.body?.method : undefined,
+    });
+
+    // Log response status when finished
+    res.on('finish', () => {
+      if (res.statusCode >= 400) {
+        logger.error('http_response_error', {
+          method: req.method,
+          userId: auth.userId,
+          sessionId,
+          statusCode: res.statusCode,
+          body: req.method === 'POST' ? req.body?.method : undefined,
+        });
+      } else {
+        logger.debug('http_response', {
+          method: req.method,
+          userId: auth.userId,
+          sessionId,
+          statusCode: res.statusCode,
+        });
+      }
+    });
 
     // Run request handler within user context (includes access token for Sheets API)
     await requestContext.run({ userId: auth.userId, email: auth.email, accessToken: auth.accessToken }, async () => {
       try {
-        const transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: undefined, // stateless mode
-        });
+        if (disableSession) {
+          // Stateless mode: new transport + server per request
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+          });
+          res.on('close', () => transport.close());
+          const sessionServer = createServer(adapter, ['filler_google_auth']);
+          await sessionServer.connect(transport);
+          await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
+        } else if (sessionId && sessions.has(sessionId)) {
+          // Existing session: reuse transport
+          const transport = sessions.get(sessionId)!;
+          await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
+        } else if (!sessionId) {
+          // New session: create transport + server, store by session ID
+          const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: () => crypto.randomUUID(),
+          });
 
-        res.on('close', () => {
-          transport.close();
-        });
+          transport.onclose = () => {
+            if (transport.sessionId) {
+              sessions.delete(transport.sessionId);
+              logger.debug('session_closed', { sessionId: transport.sessionId });
+            }
+          };
 
-        await server.connect(transport);
-        await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
+          const sessionServer = createServer(adapter, ['filler_google_auth']);
+          await sessionServer.connect(transport);
+          await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
+
+          // Store after first handleRequest (session ID is assigned during initialize)
+          if (transport.sessionId) {
+            sessions.set(transport.sessionId, transport);
+            logger.debug('session_created', { sessionId: transport.sessionId });
+          }
+        } else {
+          // Client sent unknown session ID
+          res.status(400).json({
+            jsonrpc: '2.0',
+            error: { code: -32000, message: 'Bad Request: No active session found for the provided session ID' },
+            id: null,
+          });
+        }
       } catch (error) {
         logger.error('http_request_error', {
+          method: req.method,
           userId: auth.userId,
+          sessionId,
           error: error instanceof Error ? error.message : String(error),
         });
         if (!res.headersSent) {
