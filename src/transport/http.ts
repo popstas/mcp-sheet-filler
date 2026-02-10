@@ -237,8 +237,8 @@ export async function startHttpServer(): Promise<void> {
       tools: Object.keys(handlers),
     });
     console.log(`MCP HTTP server listening on http://${host}:${port}`);
-    console.log(`Health check: http://${host}:${port}/health`);
-    console.log(`MCP endpoint: http://${host}:${port}/mcp`);
+    console.log(`Health check: ${authConfig.resourceUrl}/health`);
+    console.log(`MCP endpoint: ${authConfig.resourceUrl}/mcp`);
     console.log(`Protected Resource Metadata: ${authConfig.resourceUrl}/.well-known/oauth-protected-resource`);
     console.log(`Authorization Server Metadata: ${authConfig.resourceUrl}/.well-known/oauth-authorization-server`);
     console.log(`Client Registration: ${authConfig.resourceUrl}/auth/register`);
