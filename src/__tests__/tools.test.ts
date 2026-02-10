@@ -94,108 +94,206 @@ describe('Tool Handlers', () => {
     });
   });
 
-  describe('filler_add_field', () => {
-    it('adds a new field', async () => {
-      const result = await handlers.filler_add_field(
-        { field: { name: 'phone', type: 'string', description: 'Phone number' } },
+  describe('filler_add_fields', () => {
+    it('adds a single field', async () => {
+      const result = await handlers.filler_add_fields(
+        { fields: [{ name: 'phone', type: 'string', description: 'Phone number' }] },
         adapter
       );
 
-      expect(result.created).toBe(true);
-      expect(result.field.name).toBe('phone');
+      expect(result.results.phone).toEqual({ created: true });
 
       const fields = await adapter.getFieldsByNames(['phone']);
       expect(fields).toHaveLength(1);
     });
 
-    it('throws error for duplicate field', async () => {
-      await expect(
-        handlers.filler_add_field({ field: { name: 'email' } }, adapter)
-      ).rejects.toThrow(FillerError);
+    it('adds multiple fields', async () => {
+      const result = await handlers.filler_add_fields(
+        { fields: [
+          { name: 'phone', type: 'string' },
+          { name: 'address', type: 'string' },
+        ] },
+        adapter
+      );
 
-      try {
-        await handlers.filler_add_field({ field: { name: 'email' } }, adapter);
-      } catch (error) {
-        expect(error).toBeInstanceOf(FillerError);
-        expect((error as FillerError).code).toBe('field_already_exists');
-      }
+      expect(result.results.phone).toEqual({ created: true });
+      expect(result.results.address).toEqual({ created: true });
+
+      const fields = await adapter.getFieldsByNames(['phone', 'address']);
+      expect(fields).toHaveLength(2);
+    });
+
+    it('returns error for duplicate field', async () => {
+      const result = await handlers.filler_add_fields(
+        { fields: [{ name: 'email' }] },
+        adapter
+      );
+
+      expect(result.results.email).toEqual({ error: 'Field "email" already exists' });
+    });
+
+    it('handles mixed results (some new, some existing)', async () => {
+      const result = await handlers.filler_add_fields(
+        { fields: [
+          { name: 'phone', type: 'string' },
+          { name: 'email' }, // already exists
+        ] },
+        adapter
+      );
+
+      expect(result.results.phone).toEqual({ created: true });
+      expect(result.results.email).toEqual({ error: 'Field "email" already exists' });
+    });
+
+    it('detects duplicates within input array', async () => {
+      const result = await handlers.filler_add_fields(
+        { fields: [
+          { name: 'phone', type: 'string' },
+          { name: 'phone', type: 'number' },
+        ] },
+        adapter
+      );
+
+      expect(result.results.phone).toEqual({ error: 'Duplicate field name in request' });
     });
   });
 
-  describe('filler_get_object_by_name', () => {
+  describe('filler_get_objects_by_name', () => {
     beforeEach(async () => {
       await adapter.addObjectByName('acme');
       await adapter.updateObjectFields('acme', { email: 'info@acme.com' });
     });
 
-    it('gets object by name with missing auto fields', async () => {
-      const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
+    it('gets single object by name with missing auto fields', async () => {
+      const result = await handlers.filler_get_objects_by_name({ names: ['acme'] }, adapter);
 
-      expect(result.found).toBe(true);
-      expect(result.object?.name).toBe('acme');
-      expect(result.object?.values.email).toBe('info@acme.com');
-      // email is set, website is missing (both are auto fields)
-      expect(result.missing).toHaveLength(1);
-      expect(result.missing?.[0].name).toBe('website');
+      expect(result.objects).toHaveLength(1);
+      const obj = result.objects[0];
+      expect(obj.found).toBe(true);
+      if (obj.found) {
+        expect(obj.object.name).toBe('acme');
+        expect(obj.object.values.email).toBe('info@acme.com');
+        expect(obj.missing).toHaveLength(1);
+        expect(obj.missing[0].name).toBe('website');
+      }
+    });
+
+    it('gets multiple objects at once', async () => {
+      await adapter.addObjectByName('globex');
+      const result = await handlers.filler_get_objects_by_name({ names: ['acme', 'globex'] }, adapter);
+
+      expect(result.objects).toHaveLength(2);
+      expect(result.objects[0].found).toBe(true);
+      expect(result.objects[1].found).toBe(true);
     });
 
     it('returns found=false for non-existent object', async () => {
-      const result = await handlers.filler_get_object_by_name({ name: 'nonexistent' }, adapter);
+      const result = await handlers.filler_get_objects_by_name({ names: ['nonexistent'] }, adapter);
 
-      expect(result.found).toBe(false);
-      expect(result.object).toBeUndefined();
-      expect(result.missing).toBeUndefined();
+      expect(result.objects).toHaveLength(1);
+      expect(result.objects[0].found).toBe(false);
+      if (!result.objects[0].found) {
+        expect(result.objects[0].name).toBe('nonexistent');
+      }
     });
 
-    it('includes field metadata by default', async () => {
-      const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
+    it('handles mixed existing and non-existing objects', async () => {
+      const result = await handlers.filler_get_objects_by_name({ names: ['acme', 'nonexistent'] }, adapter);
 
-      expect(result.missing?.[0].instructions).toBeDefined();
-      expect(result.missing?.[0].type).toBeDefined();
+      expect(result.objects).toHaveLength(2);
+      expect(result.objects[0].found).toBe(true);
+      expect(result.objects[1].found).toBe(false);
     });
 
-    it('excludes field metadata when include_field_meta is false', async () => {
-      const result = await handlers.filler_get_object_by_name(
-        { name: 'acme', include_field_meta: false },
+    it('includes field metadata only on first found object', async () => {
+      await adapter.addObjectByName('globex');
+      const result = await handlers.filler_get_objects_by_name(
+        { names: ['acme', 'globex'], include_field_meta: true },
         adapter
       );
 
-      expect(result.missing?.[0]).toEqual({ name: 'website' });
+      expect(result.objects).toHaveLength(2);
+      if (result.objects[0].found) {
+        expect(result.objects[0].missing[0].instructions).toBeDefined();
+        expect(result.objects[0].missing[0].type).toBeDefined();
+      }
+      if (result.objects[1].found) {
+        expect(result.objects[1].missing[0]).toEqual({ name: 'email' });
+        expect(result.objects[1].missing[0]).not.toHaveProperty('instructions');
+      }
+    });
+
+    it('excludes field metadata when include_field_meta is false', async () => {
+      const result = await handlers.filler_get_objects_by_name(
+        { names: ['acme'], include_field_meta: false },
+        adapter
+      );
+
+      if (result.objects[0].found) {
+        expect(result.objects[0].missing[0]).toEqual({ name: 'website' });
+      }
     });
 
     it('returns empty missing array when all auto fields are filled', async () => {
       await adapter.updateObjectFields('acme', { website: 'https://acme.com' });
 
-      const result = await handlers.filler_get_object_by_name({ name: 'acme' }, adapter);
+      const result = await handlers.filler_get_objects_by_name({ names: ['acme'] }, adapter);
 
-      expect(result.found).toBe(true);
-      expect(result.missing).toHaveLength(0);
+      if (result.objects[0].found) {
+        expect(result.objects[0].missing).toHaveLength(0);
+      }
     });
   });
 
-  describe('filler_add_object_by_name', () => {
-    it('creates a new object with simple return type', async () => {
-      const result = await handlers.filler_add_object_by_name({ name: 'newobj' }, adapter);
+  describe('filler_add_objects_by_name', () => {
+    it('creates a single object', async () => {
+      const result = await handlers.filler_add_objects_by_name({ names: ['newobj'] }, adapter);
 
-      expect(result.created).toBe(true);
-      expect(result.object.name).toBe('newobj');
+      expect(result.results.newobj).toEqual({ created: true });
 
       const obj = await adapter.getObjectByName('newobj');
       expect(obj).not.toBeNull();
     });
 
-    it('throws error for duplicate object', async () => {
+    it('creates multiple objects', async () => {
+      const result = await handlers.filler_add_objects_by_name({ names: ['obj1', 'obj2'] }, adapter);
+
+      expect(result.results.obj1).toEqual({ created: true });
+      expect(result.results.obj2).toEqual({ created: true });
+
+      const obj1 = await adapter.getObjectByName('obj1');
+      const obj2 = await adapter.getObjectByName('obj2');
+      expect(obj1).not.toBeNull();
+      expect(obj2).not.toBeNull();
+    });
+
+    it('returns error for duplicate object', async () => {
       await adapter.addObjectByName('existing');
 
-      await expect(
-        handlers.filler_add_object_by_name({ name: 'existing' }, adapter)
-      ).rejects.toThrow(FillerError);
+      const result = await handlers.filler_add_objects_by_name({ names: ['existing'] }, adapter);
 
-      try {
-        await handlers.filler_add_object_by_name({ name: 'existing' }, adapter);
-      } catch (error) {
-        expect((error as FillerError).code).toBe('object_already_exists');
-      }
+      expect(result.results.existing).toEqual({ error: 'Object "existing" already exists' });
+    });
+
+    it('handles mixed results (some new, some existing)', async () => {
+      await adapter.addObjectByName('existing');
+
+      const result = await handlers.filler_add_objects_by_name(
+        { names: ['newobj', 'existing'] },
+        adapter
+      );
+
+      expect(result.results.newobj).toEqual({ created: true });
+      expect(result.results.existing).toEqual({ error: 'Object "existing" already exists' });
+    });
+
+    it('detects duplicates within input array', async () => {
+      const result = await handlers.filler_add_objects_by_name(
+        { names: ['obj1', 'obj1'] },
+        adapter
+      );
+
+      expect(result.results.obj1).toEqual({ error: 'Duplicate name in request' });
     });
   });
 

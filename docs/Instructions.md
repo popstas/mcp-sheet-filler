@@ -24,8 +24,11 @@ Use a higher `limit` with `filler_get_next_missing_fields_objects` to get multip
 |------|-------------|
 | `filler_use_sheet_id` | Switch to a different Google Sheet |
 | `filler_init` | Create fields tab and populate from first tab's column headers |
-| `filler_save_objects_no_overwrite` | Save values for multiple objects at once (batch) |
 | `filler_get_next_missing_fields_objects` | Get multiple objects with missing auto-fill fields (batch) |
+| `filler_save_objects_no_overwrite` | Save values for multiple objects at once (batch) |
+| `filler_add_objects_by_name` | Create new objects (batch) |
+| `filler_add_fields` | Add new fields to the schema (batch) |
+| `filler_get_objects_by_name` | Get objects by their names with missing auto fields (batch) |
 
 ## Field Properties
 

@@ -108,10 +108,10 @@ Validation logic (emptiness checks, type validation, no-overwrite) lives in the 
 ### MCP Tools
 
 1. `filler_init` - create fields tab and populate from first tab's column headers
-2. `filler_add_field` - add a new field
+2. `filler_add_fields` - add new fields (batch)
 3. `filler_list_fields` - list all or subset of fields
-4. `filler_get_object_by_name` - get object by name with missing auto fields
-5. `filler_add_object_by_name` - create object with just the key
+4. `filler_get_objects_by_name` - get objects by names with missing auto fields (batch)
+5. `filler_add_objects_by_name` - create objects with just the key (batch)
 6. `filler_save_objects_no_overwrite` - save values for multiple objects at once without overwriting non-empty fields
 7. `filler_get_next_missing_fields_objects` - get objects with missing auto-fill fields (default limit 1)
 8. `filler_use_sheet_id` - switch to a different Google Sheet by ID or URL

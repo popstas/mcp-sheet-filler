@@ -4,10 +4,10 @@ import { FillerError } from '../types.js';
 import { isEmpty, processSaveValues } from '../validation.js';
 import { logger } from '../logger.js';
 import {
-  addFieldSchema,
+  addFieldsSchema,
   listFieldsSchema,
-  getObjectByNameSchema,
-  addObjectByNameSchema,
+  getObjectsByNameSchema,
+  addObjectsByNameSchema,
   saveObjectsNoOverwriteSchema,
   getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
@@ -32,16 +32,48 @@ function stripInstructions(fields: Field[], include: boolean): Field[] {
 }
 
 export const handlers = {
-  filler_add_field: (async (args, adapter) => {
-    const { field } = addFieldSchema.parse(args);
-    const existing = await adapter.getFieldsByNames([field.name]);
-    if (existing.length > 0) {
-      throw new FillerError('field_already_exists', `Field "${field.name}" already exists`);
+  filler_add_fields: (async (args, adapter) => {
+    const { fields } = addFieldsSchema.parse(args);
+
+    // Check for duplicates within input
+    const inputNames = new Set<string>();
+    const results: Record<string, { created: true } | { error: string }> = {};
+
+    for (const field of fields) {
+      if (inputNames.has(field.name)) {
+        results[field.name] = { error: `Duplicate field name in request` };
+      }
+      inputNames.add(field.name);
     }
-    await adapter.addField(field);
-    logger.info('tool_add_field_success', { name: field.name, type: field.type || 'string' });
-    return { created: true, field };
-  }) as ToolHandler<unknown, { created: boolean; field: Field }>,
+
+    // Check which names already exist (1 call)
+    const existing = await adapter.getFieldsByNames([...inputNames]);
+    const existingNames = new Set(existing.map((f) => f.name));
+
+    const toAdd: Field[] = [];
+    for (const field of fields) {
+      if (results[field.name]) continue; // already marked as duplicate
+      if (existingNames.has(field.name)) {
+        results[field.name] = { error: `Field "${field.name}" already exists` };
+      } else {
+        toAdd.push(field);
+        results[field.name] = { created: true };
+      }
+    }
+
+    if (toAdd.length > 0) {
+      if (adapter.addFields) {
+        await adapter.addFields(toAdd);
+      } else {
+        for (const field of toAdd) {
+          await adapter.addField(field);
+        }
+      }
+    }
+
+    logger.info('tool_add_fields_success', { count: toAdd.length, total: fields.length });
+    return { results };
+  }) as ToolHandler<unknown, { results: Record<string, { created: true } | { error: string }> }>,
 
   filler_list_fields: (async (args, adapter) => {
     const { names, include_instructions } = listFieldsSchema.parse(args);
@@ -49,62 +81,107 @@ export const handlers = {
     return { fields: stripInstructions(fields, include_instructions) };
   }) as ToolHandler<unknown, { fields: Field[] }>,
 
-  filler_get_object_by_name: (async (args, adapter) => {
-    const { name, include_field_meta } = getObjectByNameSchema.parse(args);
+  filler_get_objects_by_name: (async (args, adapter) => {
+    const { names, include_field_meta } = getObjectsByNameSchema.parse(args);
 
-    // Use batch operation if available, otherwise fall back to separate calls
-    let obj: { name: string; values: Record<string, string> } | null;
+    // Load all objects and fields in one call
+    let allObjects: { name: string; values: Record<string, string> }[];
     let fields: Field[];
 
-    if (adapter.getObjectByNameAndFields) {
-      const result = await adapter.getObjectByNameAndFields(name);
-      obj = result.object;
+    if (adapter.getObjectsAndFields) {
+      const result = await adapter.getObjectsAndFields();
+      allObjects = result.objects;
       fields = result.fields;
     } else {
-      obj = await adapter.getObjectByName(name);
+      allObjects = await adapter.listObjects();
       fields = await adapter.listFields();
     }
 
-    if (!obj) {
-      return { found: false };
-    }
-
-    // Get list of missing auto fields
+    const objectMap = new Map(allObjects.map((o) => [o.name, o]));
     const autoFields = fields.filter((f) => f.auto === true);
-    const missingFields = autoFields.filter((f) => isEmpty(obj!.values[f.name]));
 
-    const missing = missingFields.map((f) => {
-      if (include_field_meta) {
-        return {
-          name: f.name,
-          type: f.type,
-          example: f.example,
-          instructions: f.instructions,
-        };
+    let isFirst = true;
+    const objects = names.map((name) => {
+      const obj = objectMap.get(name);
+      if (!obj) {
+        return { found: false as const, name };
       }
-      return { name: f.name };
+
+      const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
+
+      const missing = missingFields.map((f) => {
+        if (include_field_meta && isFirst) {
+          return {
+            name: f.name,
+            type: f.type,
+            example: f.example,
+            instructions: f.instructions,
+          };
+        }
+        return { name: f.name };
+      });
+
+      isFirst = false;
+      return { found: true as const, object: obj, missing };
     });
 
-    return { found: true, object: obj, missing };
+    return { objects };
   }) as ToolHandler<
     unknown,
     {
-      found: boolean;
-      object?: { name: string; values: Record<string, string> };
-      missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+      objects: Array<
+        | { found: false; name: string }
+        | {
+            found: true;
+            object: { name: string; values: Record<string, string> };
+            missing: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
+          }
+      >;
     }
   >,
 
-  filler_add_object_by_name: (async (args, adapter) => {
-    const { name } = addObjectByNameSchema.parse(args);
-    const existing = await adapter.getObjectByName(name);
-    if (existing) {
-      throw new FillerError('object_already_exists', `Object "${name}" already exists`);
+  filler_add_objects_by_name: (async (args, adapter) => {
+    const { names } = addObjectsByNameSchema.parse(args);
+
+    // Check for duplicates within input
+    const inputNames = new Set<string>();
+    const results: Record<string, { created: true } | { error: string }> = {};
+
+    for (const name of names) {
+      if (inputNames.has(name)) {
+        results[name] = { error: `Duplicate name in request` };
+      }
+      inputNames.add(name);
     }
-    await adapter.addObjectByName(name);
-    logger.info('tool_add_object_success', { name });
-    return { created: true, object: { name } };
-  }) as ToolHandler<unknown, { created: boolean; object: { name: string } }>,
+
+    // Load all objects to check existence (1 call)
+    const allObjects = await adapter.listObjects();
+    const existingNames = new Set(allObjects.map((o) => o.name));
+
+    const toAdd: string[] = [];
+    for (const name of names) {
+      if (results[name]) continue; // already marked as duplicate
+      if (existingNames.has(name)) {
+        results[name] = { error: `Object "${name}" already exists` };
+      } else {
+        toAdd.push(name);
+        results[name] = { created: true };
+      }
+    }
+
+    if (toAdd.length > 0) {
+      if (adapter.addObjectsByName) {
+        await adapter.addObjectsByName(toAdd);
+      } else {
+        for (const name of toAdd) {
+          await adapter.addObjectByName(name);
+        }
+      }
+    }
+
+    logger.info('tool_add_objects_success', { count: toAdd.length, total: names.length });
+    return { results };
+  }) as ToolHandler<unknown, { results: Record<string, { created: true } | { error: string }> }>,
 
   filler_save_objects_no_overwrite: (async (args, adapter) => {
     const { objects: inputObjects } = saveObjectsNoOverwriteSchema.parse(args);

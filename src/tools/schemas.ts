@@ -1,16 +1,19 @@
 import { z } from 'zod';
 
-export const addFieldSchema = z.object({
-  field: z
-    .object({
-      name: z.string().describe('Unique field name'),
-      description: z.string().optional().describe('Field description'),
-      auto: z.boolean().optional().describe('Auto-fill flag'),
-      instructions: z.string().optional().describe('Instructions for auto-filling'),
-      type: z.string().optional().describe('Data type (string, number, date, etc.)'),
-      example: z.string().optional().describe('Example value'),
-    })
-    .describe('Field to add'),
+export const addFieldsSchema = z.object({
+  fields: z
+    .array(
+      z.object({
+        name: z.string().describe('Unique field name'),
+        description: z.string().optional().describe('Field description'),
+        auto: z.boolean().optional().describe('Auto-fill flag'),
+        instructions: z.string().optional().describe('Instructions for auto-filling'),
+        type: z.string().optional().describe('Data type (string, number, date, etc.)'),
+        example: z.string().optional().describe('Example value'),
+      })
+    )
+    .min(1)
+    .describe('Fields to add'),
 });
 
 export const listFieldsSchema = z.object({
@@ -22,8 +25,8 @@ export const listFieldsSchema = z.object({
     .describe('Include instructions in response'),
 });
 
-export const getObjectByNameSchema = z.object({
-  name: z.string().describe('Object name (key field value)'),
+export const getObjectsByNameSchema = z.object({
+  names: z.array(z.string()).min(1).describe('Object names (key field values)'),
   include_field_meta: z
     .boolean()
     .optional()
@@ -31,8 +34,8 @@ export const getObjectByNameSchema = z.object({
     .describe('Include field metadata in response'),
 });
 
-export const addObjectByNameSchema = z.object({
-  name: z.string().describe('Name for the new object'),
+export const addObjectsByNameSchema = z.object({
+  names: z.array(z.string()).min(1).describe('Names for the new objects'),
 });
 
 export const saveObjectsNoOverwriteSchema = z.object({

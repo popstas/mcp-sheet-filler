@@ -23,10 +23,10 @@ import { FillerError } from './types.js';
 import { handlers, type ToolName } from './tools/index.js';
 import { logger } from './logger.js';
 import {
-  addFieldSchema,
+  addFieldsSchema,
   listFieldsSchema,
-  getObjectByNameSchema,
-  addObjectByNameSchema,
+  getObjectsByNameSchema,
+  addObjectsByNameSchema,
   saveObjectsNoOverwriteSchema,
   getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
@@ -50,11 +50,11 @@ type ToolDefinition = {
 };
 
 const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
-  filler_add_field: {
-    description: 'Add a new field to the schema',
-    inputSchema: addFieldSchema,
+  filler_add_fields: {
+    description: 'Add new fields to the schema',
+    inputSchema: addFieldsSchema,
     annotations: {
-      title: 'Add Field',
+      title: 'Add Fields',
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
@@ -71,21 +71,21 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       openWorldHint: true,
     },
   },
-  filler_get_object_by_name: {
-    description: 'Get an object by its name (key field)',
-    inputSchema: getObjectByNameSchema,
+  filler_get_objects_by_name: {
+    description: 'Get objects by their names (key field values)',
+    inputSchema: getObjectsByNameSchema,
     annotations: {
-      title: 'Get Object by Name',
+      title: 'Get Objects by Name',
       readOnlyHint: true,
       destructiveHint: false,
       openWorldHint: true,
     },
   },
-  filler_add_object_by_name: {
-    description: 'Create a new object with the given name',
-    inputSchema: addObjectByNameSchema,
+  filler_add_objects_by_name: {
+    description: 'Create new objects with the given names',
+    inputSchema: addObjectsByNameSchema,
     annotations: {
-      title: 'Add Object by Name',
+      title: 'Add Objects by Name',
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
@@ -238,7 +238,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
     },
     async ({ object_name }) => {
       const startStep = object_name
-        ? `First, call \`filler_get_object_by_name\` with name "${object_name}" to retrieve the object and its missing auto-fill fields.`
+        ? `First, call \`filler_get_objects_by_name\` with names ["${object_name}"] to retrieve the object and its missing auto-fill fields.`
         : `First, call \`filler_get_next_missing_fields_objects\` (default limit 1) to get the next object that has empty auto-fill fields.`;
 
       const text = `You are a sheet-filling assistant. Your job is to fill in missing values for objects in a Google Sheet.

@@ -933,6 +933,106 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       }
     },
 
+    async addFields(fieldsToAdd: Field[]): Promise<void> {
+      if (fieldsToAdd.length === 0) return;
+
+      await ensureValidTokens();
+      const client = getSheetsClient();
+      logger.debug('sheets_add_fields', { count: fieldsToAdd.length });
+
+      // 1. Append all field rows to fields tab (1 API call)
+      const rows = fieldsToAdd.map((field) => [
+        field.name,
+        field.description || '',
+        field.auto ? 'true' : 'false',
+        field.instructions || '',
+        field.type || 'string',
+        field.example || '',
+      ]);
+
+      try {
+        await client.spreadsheets.values.append({
+          spreadsheetId: state.spreadsheetId,
+          range: `${fieldsTab}!A:F`,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: rows,
+          },
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to add fields: ${err.message}`);
+      }
+
+      // 2. Add new column headers to data sheet for fields that don't exist yet
+      const resolvedDataTab = await resolveDataTab();
+      const headers = await getDataHeaders(); // 1 API call
+      const newHeaders: string[] = [];
+      for (const field of fieldsToAdd) {
+        if (!headers.includes(field.name) && !newHeaders.includes(field.name)) {
+          newHeaders.push(field.name);
+        }
+      }
+
+      if (newHeaders.length > 0) {
+        const updateData = newHeaders.map((name, i) => {
+          const colIndex = headers.length + i;
+          const colLetter = columnIndexToLetter(colIndex);
+          return {
+            range: `${resolvedDataTab}!${colLetter}1`,
+            values: [[name]],
+          };
+        });
+
+        try {
+          await client.spreadsheets.values.batchUpdate({
+            spreadsheetId: state.spreadsheetId,
+            requestBody: {
+              valueInputOption: 'RAW',
+              data: updateData,
+            },
+          });
+        } catch (error: unknown) {
+          const err = error as { message?: string };
+          throw new FillerError('storage_error', `Failed to add column headers: ${err.message}`);
+        }
+      }
+    },
+
+    async addObjectsByName(names: string[]): Promise<void> {
+      if (names.length === 0) return;
+
+      await ensureValidTokens();
+      const client = getSheetsClient();
+      logger.debug('sheets_add_objects_by_name', { count: names.length });
+
+      const headers = await getDataHeaders(); // 1 API call
+      if (headers.length === 0) {
+        throw new FillerError('storage_error', 'Data sheet has no headers');
+      }
+
+      const resolvedDataTab = await resolveDataTab();
+      const rows = names.map((name) => {
+        const row = new Array(headers.length).fill('');
+        row[0] = name; // First column is always the key
+        return row;
+      });
+
+      try {
+        await client.spreadsheets.values.append({
+          spreadsheetId: state.spreadsheetId,
+          range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
+          valueInputOption: 'RAW',
+          requestBody: {
+            values: rows,
+          },
+        });
+      } catch (error: unknown) {
+        const err = error as { message?: string };
+        throw new FillerError('storage_error', `Failed to add objects: ${err.message}`);
+      }
+    },
+
     async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string; alreadyExists?: boolean }> {
       await ensureValidTokens();
       const client = getSheetsClient();

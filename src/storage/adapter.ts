@@ -31,6 +31,8 @@ export interface StorageAdapter {
     updates: Array<{ name: string; values: Record<string, string> }>,
     fields: Field[]
   ): Promise<void>;
+  addFields?(fields: Field[]): Promise<void>;
+  addObjectsByName?(names: string[]): Promise<void>;
 }
 
 export interface StorageConfig {

@@ -128,45 +128,45 @@ List all fields or a subset.
 { "names": ["field1", "field2"], "include_instructions": true }
 ```
 
-### filler_get_fields_by_names
+### filler_add_fields
 
-Get field metadata by names.
-
-```json
-{ "names": ["field1", "field2"] }
-```
-
-### filler_add_field
-
-Add a new field.
+Add new fields (batch).
 
 ```json
 {
-  "field": {
-    "name": "website",
-    "description": "Company website",
-    "auto": true,
-    "type": "url",
-    "instructions": "Find the official website"
-  }
+  "fields": [
+    {
+      "name": "website",
+      "description": "Company website",
+      "auto": true,
+      "type": "url",
+      "instructions": "Find the official website"
+    }
+  ]
 }
 ```
 
-### filler_get_object / filler_get_object_by_name
+Returns `{ results: { [name]: { created: true } | { error: "..." } } }`.
 
-Get an object by its key.
+### filler_get_objects_by_name
 
-```json
-{ "name": "Acme Corp" }
-```
-
-### filler_add_object_by_name
-
-Create a new object.
+Get objects by their names (batch).
 
 ```json
-{ "name": "Acme Corp" }
+{ "names": ["Acme Corp", "Globex"] }
 ```
+
+Returns `{ objects: [{ found, object?, missing? } | { found: false, name }] }`.
+
+### filler_add_objects_by_name
+
+Create new objects (batch).
+
+```json
+{ "names": ["Acme Corp", "Globex"] }
+```
+
+Returns `{ results: { [name]: { created: true } | { error: "..." } } }`.
 
 ### filler_save_objects_no_overwrite
 

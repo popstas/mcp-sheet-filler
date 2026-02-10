@@ -74,13 +74,13 @@ filler_get_next_missing_fields_objects({ limit: 1 })
 ```
 Returns objects with missing auto fields (default limit 1). If `found: false`, all objects are complete.
 
-**Option B: Get a specific object by name**
+**Option B: Get specific objects by name**
 ```
-filler_get_object_by_name({ name: "Acme Corp" })
+filler_get_objects_by_name({ names: ["Acme Corp"] })
 ```
-Returns the object with its missing auto fields. Useful when you know which object to work on.
+Returns objects with their missing auto fields. Useful when you know which objects to work on.
 
-Option A returns `{ found, objects, count, remain }`. Option B returns `{ found, object, missing }`. Both provide object data and fields that need filling.
+Option A returns `{ found, objects, count, remain }`. Option B returns `{ objects: [{ found, object, missing }] }`. Both provide object data and fields that need filling.
 
 #### 3. Collect Values
 
@@ -125,25 +125,25 @@ Continue with step 2 until no missing auto fields remain.
 
 ## Creating New Data
 
-### Add a Field
+### Add Fields
 
 ```
-filler_add_field({
-  field: {
+filler_add_fields({
+  fields: [{
     name: "revenue",
     description: "Annual revenue",
     type: "number",
     auto: true,
-    instructions: "Find the company's annual revenue in USD"
+    instructions: "Find the company's annual revenue in USD",
     example: "1000000"
-  }
+  }]
 })
 ```
 
-### Add an Object
+### Add Objects
 
 ```
-filler_add_object_by_name({ name: "New Company" })
+filler_add_objects_by_name({ names: ["New Company"] })
 ```
 
 ## Example Session
@@ -156,6 +156,10 @@ filler_list_fields()
 # 2. Get object
 filler_get_next_missing_fields_objects({ limit: 1 })
 → { found: true, objects: [{ object: { name: "Acme Corp" }, missing: [{ name: "website", type: "url", instructions: "Find official website" }] }], count: 1, remain: 0 }
+
+# 2b. Or get a specific object
+filler_get_objects_by_name({ names: ["Acme Corp"] })
+→ { objects: [{ found: true, object: { name: "Acme Corp" }, missing: [{ name: "website", ... }] }] }
 
 # 3. Collect and save
 filler_save_objects_no_overwrite({ objects: [{ name: "Acme Corp", values: { website: "https://acme.com" } }] })

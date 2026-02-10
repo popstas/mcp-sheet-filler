@@ -41,13 +41,10 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
 
       const toolNames = result.tools.map((t) => t.name).sort();
       expect(toolNames).toEqual([
-        'filler_add_field',
-        'filler_add_object_by_name',
-        'filler_get_fields_by_names',
-        'filler_get_missing_auto_fields',
+        'filler_add_fields',
+        'filler_add_objects_by_name',
         'filler_get_next_missing_fields_objects',
-        'filler_get_object',
-        'filler_get_object_by_name',
+        'filler_get_objects_by_name',
         'filler_google_auth',
         'filler_init',
         'filler_list_fields',
@@ -65,25 +62,14 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       }
     });
 
-    it('filler_get_fields_by_names has correct schema', async () => {
+    it('filler_add_fields has correct schema', async () => {
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_get_fields_by_names');
+      const tool = result.tools.find((t) => t.name === 'filler_add_fields');
 
       expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Get field metadata by list of names');
-      expect(tool!.inputSchema.properties).toHaveProperty('names');
-      expect(tool!.inputSchema.properties).toHaveProperty('include_instructions');
-      expect(tool!.inputSchema.required).toContain('names');
-    });
-
-    it('filler_add_field has correct schema', async () => {
-      const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_add_field');
-
-      expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Add a new field to the schema');
-      expect(tool!.inputSchema.properties).toHaveProperty('field');
-      expect(tool!.inputSchema.required).toContain('field');
+      expect(tool!.description).toBe('Add new fields to the schema');
+      expect(tool!.inputSchema.properties).toHaveProperty('fields');
+      expect(tool!.inputSchema.required).toContain('fields');
     });
 
     it('filler_list_fields has correct schema', async () => {
@@ -96,34 +82,24 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(tool!.inputSchema.properties).toHaveProperty('include_instructions');
     });
 
-    it('filler_get_object has correct schema', async () => {
+    it('filler_get_objects_by_name has correct schema', async () => {
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_get_object');
+      const tool = result.tools.find((t) => t.name === 'filler_get_objects_by_name');
 
       expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Get an object by its identifier');
-      expect(tool!.inputSchema.properties).toHaveProperty('id');
-      expect(tool!.inputSchema.required).toContain('id');
+      expect(tool!.description).toBe('Get objects by their names (key field values)');
+      expect(tool!.inputSchema.properties).toHaveProperty('names');
+      expect(tool!.inputSchema.required).toContain('names');
     });
 
-    it('filler_get_object_by_name has correct schema', async () => {
+    it('filler_add_objects_by_name has correct schema', async () => {
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_get_object_by_name');
+      const tool = result.tools.find((t) => t.name === 'filler_add_objects_by_name');
 
       expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Get an object by its name (key field)');
-      expect(tool!.inputSchema.properties).toHaveProperty('name');
-      expect(tool!.inputSchema.required).toContain('name');
-    });
-
-    it('filler_add_object_by_name has correct schema', async () => {
-      const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_add_object_by_name');
-
-      expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Create a new object with the given name');
-      expect(tool!.inputSchema.properties).toHaveProperty('name');
-      expect(tool!.inputSchema.required).toContain('name');
+      expect(tool!.description).toBe('Create new objects with the given names');
+      expect(tool!.inputSchema.properties).toHaveProperty('names');
+      expect(tool!.inputSchema.required).toContain('names');
     });
 
     it('filler_save_objects_no_overwrite has correct schema', async () => {
@@ -136,17 +112,6 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       );
       expect(tool!.inputSchema.properties).toHaveProperty('objects');
       expect(tool!.inputSchema.required).toContain('objects');
-    });
-
-    it('filler_get_missing_auto_fields has correct schema', async () => {
-      const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_get_missing_auto_fields');
-
-      expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Get list of auto-fill fields that are empty for an object');
-      expect(tool!.inputSchema.properties).toHaveProperty('name');
-      expect(tool!.inputSchema.properties).toHaveProperty('include_field_meta');
-      expect(tool!.inputSchema.required).toContain('name');
     });
 
     it('filler_get_next_missing_fields_objects has correct schema', async () => {
@@ -212,7 +177,7 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(result.messages[0].role).toBe('user');
       const text = result.messages[0].content.type === 'text' ? result.messages[0].content.text : '';
       expect(text).toContain('filler_get_next_missing_fields_objects');
-      expect(text).not.toContain('filler_get_object_by_name');
+      expect(text).not.toContain('filler_get_objects_by_name');
     });
 
     it('returns prompt with object_name arg (uses get_object_by_name)', async () => {
@@ -224,7 +189,7 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0].role).toBe('user');
       const text = result.messages[0].content.type === 'text' ? result.messages[0].content.text : '';
-      expect(text).toContain('filler_get_object_by_name');
+      expect(text).toContain('filler_get_objects_by_name');
       expect(text).toContain('Acme Corp');
     });
   });
