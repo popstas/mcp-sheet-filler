@@ -27,6 +27,10 @@ export interface StorageAdapter {
   // Optional: batch operations for optimization (only implemented by sheets adapter)
   getObjectByNameAndFields?(name: string): Promise<{ object: DataObject | null; fields: Field[] }>;
   getObjectsAndFields?(): Promise<{ objects: DataObject[]; fields: Field[] }>;
+  batchUpdateObjectsFields?(
+    updates: Array<{ name: string; values: Record<string, string> }>,
+    fields: Field[]
+  ): Promise<void>;
 }
 
 export interface StorageConfig {

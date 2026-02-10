@@ -109,21 +109,24 @@ export const handlers = {
   filler_save_objects_no_overwrite: (async (args, adapter) => {
     const { objects: inputObjects } = saveObjectsNoOverwriteSchema.parse(args);
 
-    // Fetch fields once for all objects
-    const fields = await adapter.listFields();
-    const knownFieldNames = new Set(fields.map((f) => f.name));
-
-    // Fetch all objects once
+    // Fetch fields and objects in one call (1 API call via batchGet)
+    let fields: Field[];
     let allObjects: { name: string; values: Record<string, string> }[];
+
     if (adapter.getObjectsAndFields) {
       const data = await adapter.getObjectsAndFields();
+      fields = data.fields;
       allObjects = data.objects;
     } else {
+      fields = await adapter.listFields();
       allObjects = await adapter.listObjects();
     }
+
+    const knownFieldNames = new Set(fields.map((f) => f.name));
     const objectMap = new Map(allObjects.map((o) => [o.name, o]));
 
     const results: Record<string, Record<string, SaveStatus> | { error: string }> = {};
+    const pendingUpdates: Array<{ name: string; values: Record<string, string> }> = [];
 
     for (const { name, values } of inputObjects) {
       const obj = objectMap.get(name);
@@ -140,12 +143,24 @@ export const handlers = {
       );
 
       if (Object.keys(valuesToSave).length > 0) {
-        await adapter.updateObjectFields(name, valuesToSave, fields);
+        pendingUpdates.push({ name, values: valuesToSave });
         // Update local copy so subsequent saves for same object see new values
         Object.assign(obj.values, valuesToSave);
       }
 
       results[name] = result;
+    }
+
+    // Write all updates in one batch call (1 data read + 1 batchUpdate = 2 API calls)
+    if (pendingUpdates.length > 0) {
+      if (adapter.batchUpdateObjectsFields) {
+        await adapter.batchUpdateObjectsFields(pendingUpdates, fields);
+      } else {
+        // Fallback: per-object updates (for mock adapter / adapters without batch support)
+        for (const { name, values } of pendingUpdates) {
+          await adapter.updateObjectFields(name, values, fields);
+        }
+      }
     }
 
     logger.info('tool_save_objects_result', { count: inputObjects.length });

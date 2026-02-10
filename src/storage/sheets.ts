@@ -848,6 +848,91 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       return { objects, fields };
     },
 
+    async batchUpdateObjectsFields(
+      updates: Array<{ name: string; values: Record<string, string> }>,
+      fields: Field[]
+    ): Promise<void> {
+      if (updates.length === 0) return;
+
+      await ensureValidTokens();
+      const client = getSheetsClient();
+      const resolvedDataTab = await resolveDataTab();
+
+      logger.debug('sheets_batch_update_objects_fields', {
+        objectCount: updates.length,
+        totalFields: updates.reduce((sum, u) => sum + Object.keys(u.values).length, 0),
+      });
+
+      // Read data sheet once
+      const data = await getSheetData(resolvedDataTab);
+      if (data.length === 0) return;
+
+      const headers = [...data[0]];
+      if (headers.length === 0) return;
+
+      // Build row index map for O(1) lookups (name → 1-based row index)
+      const keyColIndex = 0;
+      const rowIndexMap = new Map<string, number>();
+      for (let i = 1; i < data.length; i++) {
+        const name = data[i][keyColIndex];
+        if (name) {
+          rowIndexMap.set(name, i + 1); // 1-based for Sheets API
+        }
+      }
+
+      // Build field type map
+      const fieldTypeMap = new Map(fields.map((f) => [f.name, f.type]));
+
+      // Accumulate all cell updates
+      const updateData: { range: string; values: (string | number)[][] }[] = [];
+
+      for (const { name, values } of updates) {
+        const rowIndex = rowIndexMap.get(name);
+        if (!rowIndex) continue;
+
+        for (const [fieldName, value] of Object.entries(values)) {
+          let colIndex = headers.indexOf(fieldName);
+          if (colIndex === -1) {
+            colIndex = headers.length;
+            headers.push(fieldName);
+            const colLetter = columnIndexToLetter(colIndex);
+            updateData.push({
+              range: `${resolvedDataTab}!${colLetter}1`,
+              values: [[fieldName]],
+            });
+          }
+
+          const colLetter = columnIndexToLetter(colIndex);
+          const fieldType = fieldTypeMap.get(fieldName);
+
+          let cellValue: string | number = value;
+          if (fieldType === 'number' && value !== '' && !isNaN(Number(value))) {
+            cellValue = Number(value);
+          }
+
+          updateData.push({
+            range: `${resolvedDataTab}!${colLetter}${rowIndex}`,
+            values: [[cellValue]],
+          });
+        }
+      }
+
+      if (updateData.length > 0) {
+        try {
+          await client.spreadsheets.values.batchUpdate({
+            spreadsheetId: state.spreadsheetId,
+            requestBody: {
+              valueInputOption: 'RAW',
+              data: updateData,
+            },
+          });
+        } catch (error: unknown) {
+          const err = error as { message?: string };
+          throw new FillerError('storage_error', `Failed to batch update objects: ${err.message}`);
+        }
+      }
+    },
+
     async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string; alreadyExists?: boolean }> {
       await ensureValidTokens();
       const client = getSheetsClient();
