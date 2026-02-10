@@ -10,14 +10,13 @@
 ## Workflow
 
 0. Call `filler_use_sheet_id` to switch to the desired Google Sheet.
-1. Call `filler_get_next_missing_fields_object` to get the first object with empty auto-fill fields.
+1. Call `filler_get_next_missing_fields_objects` (default limit 1) to get objects with empty auto-fill fields.
 2. Read the field instructions for missing fields.
 3. Research or compute the values following those instructions.
-4. Call `filler_save_object_no_overwrite` to save values (existing non-empty values are never overwritten).
+4. Call `filler_save_objects_no_overwrite` with `objects: [{ name, values }]` to save values (existing non-empty values are never overwritten).
 5. Repeat from step 1 until no more objects need filling.
 
-After first row use `filler_get_next_missing_fields_objects` to get multiple objects with missing auto-fill fields at once.
-Use `filler_save_objects_no_overwrite` to save values for multiple objects at once.
+Use a higher `limit` with `filler_get_next_missing_fields_objects` to get multiple objects at once.
 
 ## Main Tools
 

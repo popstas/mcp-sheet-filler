@@ -168,51 +168,46 @@ Create a new object.
 { "name": "Acme Corp" }
 ```
 
-### filler_save_object_no_overwrite
+### filler_save_objects_no_overwrite
 
-Save field values without overwriting non-empty fields.
+Save field values for multiple objects without overwriting non-empty fields.
 
 ```json
 {
-  "name": "Acme Corp",
-  "values": {
-    "website": "https://acme.com",
-    "founded": "1990"
-  }
+  "objects": [
+    {
+      "name": "Acme Corp",
+      "values": {
+        "website": "https://acme.com",
+        "founded": "1990"
+      }
+    }
+  ]
 }
 ```
 
-Returns status for each field:
+Returns status for each field per object:
 - `saved` — value was saved
 - `skipped_already_set` — field already has a value
 - `rejected_unknown_field` — field not in schema
 - `rejected_invalid_type` — value failed type validation
 
-### filler_get_missing_auto_fields
+### filler_get_next_missing_fields_objects
 
-Get empty auto-fill fields for an object.
-
-```json
-{ "name": "Acme Corp", "include_field_meta": true }
-```
-
-### filler_get_next_missing_fields_object
-
-Get the first object that has missing auto-fill fields.
+Get objects that have missing auto-fill fields (default limit 1).
 
 ```json
-{ "include_field_meta": true }
+{ "limit": 1, "include_field_meta": true }
 ```
 
-Returns `{ found, object, missing }` — use this to process objects one by one.
+Returns `{ found, objects, count, remain }` — use this to process objects one by one or in batches.
 
 ## Workflow Example
 
 1. Agent calls `filler_list_fields` to understand the schema
-2. Agent calls `filler_get_object_by_name` to read an object
-3. Agent calls `filler_get_missing_auto_fields` to find what needs filling
-4. Agent collects values using instructions from field metadata
-5. Agent calls `filler_save_object_no_overwrite` to save values safely
+2. Agent calls `filler_get_next_missing_fields_objects` to get objects with missing fields
+3. Agent collects values using instructions from field metadata
+4. Agent calls `filler_save_objects_no_overwrite` to save values safely
 
 ## Error Codes
 

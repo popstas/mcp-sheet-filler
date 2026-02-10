@@ -27,9 +27,7 @@ import {
   listFieldsSchema,
   getObjectByNameSchema,
   addObjectByNameSchema,
-  saveObjectNoOverwriteSchema,
   saveObjectsNoOverwriteSchema,
-  getNextMissingFieldsObjectSchema,
   getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
   googleAuthSchema,
@@ -94,17 +92,6 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       openWorldHint: true,
     },
   },
-  filler_save_object_no_overwrite: {
-    description: 'Save field values without overwriting existing non-empty values',
-    inputSchema: saveObjectNoOverwriteSchema,
-    annotations: {
-      title: 'Save Object (No Overwrite)',
-      readOnlyHint: false,
-      destructiveHint: true,
-      idempotentHint: true,
-      openWorldHint: true,
-    },
-  },
   filler_save_objects_no_overwrite: {
     description: 'Save field values for multiple objects at once without overwriting existing non-empty values',
     inputSchema: saveObjectsNoOverwriteSchema,
@@ -113,16 +100,6 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
       readOnlyHint: false,
       destructiveHint: true,
       idempotentHint: true,
-      openWorldHint: true,
-    },
-  },
-  filler_get_next_missing_fields_object: {
-    description: 'Get the first object that has missing auto-fill fields',
-    inputSchema: getNextMissingFieldsObjectSchema,
-    annotations: {
-      title: 'Get Next Object with Missing Fields',
-      readOnlyHint: true,
-      destructiveHint: false,
       openWorldHint: true,
     },
   },
@@ -262,7 +239,7 @@ export function createServer(adapter: StorageAdapter, excludeTools: string[] = [
     async ({ object_name }) => {
       const startStep = object_name
         ? `First, call \`filler_get_object_by_name\` with name "${object_name}" to retrieve the object and its missing auto-fill fields.`
-        : `First, call \`filler_get_next_missing_fields_object\` to get the next object that has empty auto-fill fields.`;
+        : `First, call \`filler_get_next_missing_fields_objects\` (default limit 1) to get the next object that has empty auto-fill fields.`;
 
       const text = `You are a sheet-filling assistant. Your job is to fill in missing values for objects in a Google Sheet.
 
@@ -271,8 +248,8 @@ ${startStep}
 Then follow this loop:
 1. Look at the missing auto-fill fields and their instructions.
 2. For each missing field, research or compute the correct value following the field's instructions.
-3. Call \`filler_save_object_no_overwrite\` with the object name and a map of field names to values.
-4. If there are more objects to fill, call \`filler_get_next_missing_fields_object\` and repeat from step 1.
+3. Call \`filler_save_objects_no_overwrite\` with objects: [{ name, values }] (single object in array).
+4. If there are more objects to fill, call \`filler_get_next_missing_fields_objects\` and repeat from step 1.
 5. When no more objects have missing fields, report that all objects are filled.
 
 Important:

@@ -35,11 +35,6 @@ export const addObjectByNameSchema = z.object({
   name: z.string().describe('Name for the new object'),
 });
 
-export const saveObjectNoOverwriteSchema = z.object({
-  name: z.string().describe('Object name'),
-  values: z.record(z.string(), z.string()).describe('Field values to save'),
-});
-
 export const saveObjectsNoOverwriteSchema = z.object({
   objects: z
     .array(
@@ -52,21 +47,13 @@ export const saveObjectsNoOverwriteSchema = z.object({
     .describe('Array of objects to save'),
 });
 
-export const getNextMissingFieldsObjectSchema = z.object({
-  include_field_meta: z
-    .boolean()
-    .optional()
-    .default(true)
-    .describe('Include field metadata in response'),
-});
-
 export const getNextMissingFieldsObjectsSchema = z.object({
   limit: z
     .number()
     .int()
     .min(1)
     .max(100)
-    .default(5)
+    .default(1)
     .describe('Maximum number of objects to return'),
   include_field_meta: z
     .boolean()

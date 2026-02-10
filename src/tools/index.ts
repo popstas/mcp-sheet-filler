@@ -8,9 +8,7 @@ import {
   listFieldsSchema,
   getObjectByNameSchema,
   addObjectByNameSchema,
-  saveObjectNoOverwriteSchema,
   saveObjectsNoOverwriteSchema,
-  getNextMissingFieldsObjectSchema,
   getNextMissingFieldsObjectsSchema,
   useSheetIdSchema,
   googleAuthSchema,
@@ -108,42 +106,6 @@ export const handlers = {
     return { created: true, object: { name } };
   }) as ToolHandler<unknown, { created: boolean; object: { name: string } }>,
 
-  filler_save_object_no_overwrite: (async (args, adapter) => {
-    const parsed = saveObjectNoOverwriteSchema.parse(args);
-    const name = parsed.name;
-    const values = parsed.values as Record<string, string>;
-
-    const obj = await adapter.getObjectByName(name);
-    if (!obj) {
-      throw new FillerError('object_not_found', `Object "${name}" not found`);
-    }
-
-    // Get fields once and reuse - eliminates duplicate getFieldNames() call
-    const fields = await adapter.listFields();
-    const knownFieldNames = new Set(fields.map((f) => f.name));
-
-    const { result, valuesToSave } = processSaveValues(
-      values,
-      obj.values,
-      fields,
-      knownFieldNames
-    );
-
-    if (Object.keys(valuesToSave).length > 0) {
-      // Pass fields to avoid re-reading them in updateObjectFields
-      await adapter.updateObjectFields(name, valuesToSave, fields);
-    }
-
-    // Summarize results by status
-    const statusCounts: Record<string, number> = {};
-    for (const status of Object.values(result)) {
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    }
-    logger.info('tool_save_object_result', { name, statusCounts });
-
-    return { result };
-  }) as ToolHandler<unknown, { result: Record<string, SaveStatus> }>,
-
   filler_save_objects_no_overwrite: (async (args, adapter) => {
     const { objects: inputObjects } = saveObjectsNoOverwriteSchema.parse(args);
 
@@ -191,77 +153,6 @@ export const handlers = {
   }) as ToolHandler<
     unknown,
     { results: Record<string, Record<string, SaveStatus> | { error: string }> }
-  >,
-
-  filler_get_next_missing_fields_object: (async (args, adapter) => {
-    const { include_field_meta } = getNextMissingFieldsObjectSchema.parse(args);
-
-    // Use batch operation if available, otherwise fall back to separate calls
-    let fields: Field[];
-    let objects: { name: string; values: Record<string, string> }[];
-
-    if (adapter.getObjectsAndFields) {
-      const result = await adapter.getObjectsAndFields();
-      fields = result.fields;
-      objects = result.objects;
-    } else {
-      fields = await adapter.listFields();
-      objects = await adapter.listObjects();
-    }
-
-    const autoFields = fields.filter((f) => f.auto === true);
-
-    if (autoFields.length === 0) {
-      return { found: false, count: 0, remain: 0 };
-    }
-
-    let firstMatch: { object: { name: string; values: Record<string, string> }; missing: Array<{ name: string; type?: string; example?: string; instructions?: string }> } | null = null;
-    let count = 0;
-
-    for (const obj of objects) {
-      const missingFields = autoFields.filter((f) => isEmpty(obj.values[f.name]));
-
-      if (missingFields.length > 0) {
-        count++;
-
-        if (!firstMatch) {
-          const missing = missingFields.map((f) => {
-            if (include_field_meta) {
-              return {
-                name: f.name,
-                type: f.type,
-                example: f.example,
-                instructions: f.instructions,
-              };
-            }
-            return { name: f.name };
-          });
-
-          firstMatch = { object: obj, missing };
-        }
-      }
-    }
-
-    if (firstMatch) {
-      return {
-        found: true,
-        object: firstMatch.object,
-        missing: firstMatch.missing,
-        count,
-        remain: count - 1,
-      };
-    }
-
-    return { found: false, count: 0, remain: 0 };
-  }) as ToolHandler<
-    unknown,
-    {
-      found: boolean;
-      object?: { name: string; values: Record<string, string> };
-      missing?: Array<{ name: string; type?: string; example?: string; instructions?: string }>;
-      count: number;
-      remain: number;
-    }
   >,
 
   filler_get_next_missing_fields_objects: (async (args, adapter) => {

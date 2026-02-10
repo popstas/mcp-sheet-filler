@@ -45,13 +45,13 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
         'filler_add_object_by_name',
         'filler_get_fields_by_names',
         'filler_get_missing_auto_fields',
-        'filler_get_next_missing_fields_object',
+        'filler_get_next_missing_fields_objects',
         'filler_get_object',
         'filler_get_object_by_name',
         'filler_google_auth',
         'filler_init',
         'filler_list_fields',
-        'filler_save_object_no_overwrite',
+        'filler_save_objects_no_overwrite',
         'filler_use_sheet_id',
       ]);
     });
@@ -126,18 +126,16 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(tool!.inputSchema.required).toContain('name');
     });
 
-    it('filler_save_object_no_overwrite has correct schema', async () => {
+    it('filler_save_objects_no_overwrite has correct schema', async () => {
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_save_object_no_overwrite');
+      const tool = result.tools.find((t) => t.name === 'filler_save_objects_no_overwrite');
 
       expect(tool).toBeDefined();
       expect(tool!.description).toBe(
-        'Save field values without overwriting existing non-empty values'
+        'Save field values for multiple objects at once without overwriting existing non-empty values'
       );
-      expect(tool!.inputSchema.properties).toHaveProperty('name');
-      expect(tool!.inputSchema.properties).toHaveProperty('values');
-      expect(tool!.inputSchema.required).toContain('name');
-      expect(tool!.inputSchema.required).toContain('values');
+      expect(tool!.inputSchema.properties).toHaveProperty('objects');
+      expect(tool!.inputSchema.required).toContain('objects');
     });
 
     it('filler_get_missing_auto_fields has correct schema', async () => {
@@ -151,13 +149,14 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(tool!.inputSchema.required).toContain('name');
     });
 
-    it('filler_get_next_missing_fields_object has correct schema', async () => {
+    it('filler_get_next_missing_fields_objects has correct schema', async () => {
       const result = await client.listTools();
-      const tool = result.tools.find((t) => t.name === 'filler_get_next_missing_fields_object');
+      const tool = result.tools.find((t) => t.name === 'filler_get_next_missing_fields_objects');
 
       expect(tool).toBeDefined();
-      expect(tool!.description).toBe('Get the first object that has missing auto-fill fields');
+      expect(tool!.description).toBe('Get multiple objects that have missing auto-fill fields (batch version)');
       expect(tool!.inputSchema.properties).toHaveProperty('include_field_meta');
+      expect(tool!.inputSchema.properties).toHaveProperty('limit');
     });
 
     it('filler_use_sheet_id has correct schema', async () => {
@@ -191,7 +190,7 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
       expect(content.uri).toBe('filler://instructions');
       const text = 'text' in content ? content.text : '';
       expect(text).toContain('Sheet Filler');
-      expect(text).toContain('filler_save_object_no_overwrite');
+      expect(text).toContain('filler_save_objects_no_overwrite');
     });
   });
 
@@ -206,13 +205,13 @@ describe.skipIf(!hasGoogleCredentials)('E2E: MCP Server', () => {
   });
 
   describe('prompts/get', () => {
-    it('returns prompt without args (uses get_next_missing_fields_object)', async () => {
+    it('returns prompt without args (uses get_next_missing_fields_objects)', async () => {
       const result = await client.getPrompt({ name: 'fill-sheet' });
 
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0].role).toBe('user');
       const text = result.messages[0].content.type === 'text' ? result.messages[0].content.text : '';
-      expect(text).toContain('filler_get_next_missing_fields_object');
+      expect(text).toContain('filler_get_next_missing_fields_objects');
       expect(text).not.toContain('filler_get_object_by_name');
     });
 

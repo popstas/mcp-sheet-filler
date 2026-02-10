@@ -95,7 +95,7 @@ Once connected, you can:
 - List available tools
 - Call `filler_list_fields` to see your schema
 - Call `filler_get_object_by_name` to retrieve data
-- Test `filler_save_object_no_overwrite` to save data
+- Test `filler_save_objects_no_overwrite` to save data
 
 ---
 

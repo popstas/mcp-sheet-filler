@@ -70,9 +70,9 @@ Two options for retrieving objects:
 
 **Option A: Get the next object with missing fields**
 ```
-filler_get_next_missing_fields_object()
+filler_get_next_missing_fields_objects({ limit: 1 })
 ```
-Returns the first object with missing auto fields. If `found: false`, all objects are complete.
+Returns objects with missing auto fields (default limit 1). If `found: false`, all objects are complete.
 
 **Option B: Get a specific object by name**
 ```
@@ -80,7 +80,7 @@ filler_get_object_by_name({ name: "Acme Corp" })
 ```
 Returns the object with its missing auto fields. Useful when you know which object to work on.
 
-Both return `{ found, object, missing }` - the object data and list of fields that need filling.
+Option A returns `{ found, objects, count, remain }`. Option B returns `{ found, object, missing }`. Both provide object data and fields that need filling.
 
 #### 3. Collect Values
 
@@ -102,12 +102,14 @@ For each missing field, follow the `instructions` to collect the value. Ensure v
 Save collected values (won't overwrite existing data):
 
 ```
-filler_save_object_no_overwrite({
-  name: "Acme Corp",
-  values: {
-    "website": "https://acme.com",
-    "founded": "1990"
-  }
+filler_save_objects_no_overwrite({
+  objects: [{
+    name: "Acme Corp",
+    values: {
+      "website": "https://acme.com",
+      "founded": "1990"
+    }
+  }]
 })
 ```
 
@@ -152,11 +154,11 @@ filler_list_fields()
 → fields: [name, website (auto), email (auto), founded]
 
 # 2. Get object
-filler_get_next_missing_fields_object()
-→ { found: true, object: { name: "Acme Corp" }, missing: [{ name: "website", type: "url", instructions: "Find official website" }] }
+filler_get_next_missing_fields_objects({ limit: 1 })
+→ { found: true, objects: [{ object: { name: "Acme Corp" }, missing: [{ name: "website", type: "url", instructions: "Find official website" }] }], count: 1, remain: 0 }
 
 # 3. Collect and save
-filler_save_object_no_overwrite({ name: "Acme Corp", values: { website: "https://acme.com" } })
+filler_save_objects_no_overwrite({ objects: [{ name: "Acme Corp", values: { website: "https://acme.com" } }] })
 → result: { website: "saved" }
 
 ## Key Rules
