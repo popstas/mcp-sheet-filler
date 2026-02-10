@@ -191,7 +191,7 @@ export const handlers = {
 
         if (collected.length < limit) {
           const missing = missingFields.map((f) => {
-            if (include_field_meta) {
+            if (include_field_meta && collected.length === 0) {
               return {
                 name: f.name,
                 type: f.type,

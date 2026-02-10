@@ -372,6 +372,26 @@ describe('Tool Handlers', () => {
       expect(result.objects[0].missing[0]).not.toHaveProperty('instructions');
     });
 
+    it('includes field meta only on first object when multiple returned', async () => {
+      await adapter.addObjectByName('obj1');
+      await adapter.addObjectByName('obj2');
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 2, include_field_meta: true },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects).toHaveLength(2);
+      expect(result.objects[0].missing[0]).toMatchObject({
+        name: 'email',
+        type: expect.any(String),
+        instructions: expect.anything(),
+      });
+      expect(result.objects[1].missing[0]).toEqual({ name: 'email' });
+      expect(result.objects[1].missing[0]).not.toHaveProperty('instructions');
+    });
+
     it('skips objects with all auto fields filled', async () => {
       await adapter.addObjectByName('filled');
       await adapter.updateObjectFields('filled', {
