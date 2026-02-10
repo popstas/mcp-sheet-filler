@@ -1,3 +1,7 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
@@ -167,52 +171,11 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   },
 };
 
-const INSTRUCTIONS_TEXT = `# Sheet Filler — Usage Instructions
-
-## Setup
-
-1. Open or create a Google Sheet with data rows (objects) and column headers (fields).
-2. Share the sheet with the service account or authenticate via OAuth.
-3. Call \`filler_init\` to create a "fields" tab from the first tab's column headers.
-4. Edit the "fields" tab to set \`auto=TRUE\` for columns the AI should fill, and add \`instructions\` describing how to determine each value.
-
-## Workflow
-
-1. Call \`filler_get_next_missing_fields_object\` to get the first object with empty auto-fill fields.
-2. Read the field instructions for missing fields.
-3. Research or compute the values following those instructions.
-4. Call \`filler_save_object_no_overwrite\` to save values (existing non-empty values are never overwritten).
-5. Repeat from step 1 until no more objects need filling.
-
-## Available Tools
-
-| Tool | Description |
-|------|-------------|
-| \`filler_init\` | Create fields tab and populate from first tab's column headers |
-| \`filler_add_field\` | Add a new field to the schema |
-| \`filler_list_fields\` | List all or a subset of fields |
-| \`filler_get_object_by_name\` | Get an object by its name (key field) |
-| \`filler_add_object_by_name\` | Create a new object with just the key |
-| \`filler_save_object_no_overwrite\` | Save values without overwriting non-empty fields |
-| \`filler_save_objects_no_overwrite\` | Save values for multiple objects at once (batch) |
-| \`filler_get_next_missing_fields_object\` | Get first object with missing auto-fill fields |
-| \`filler_get_next_missing_fields_objects\` | Get multiple objects with missing auto-fill fields (batch) |
-| \`filler_get_missing_auto_fields\` | Get empty auto-fill fields for a specific object |
-| \`filler_use_sheet_id\` | Switch to a different Google Sheet |
-| \`filler_google_auth\` | Authenticate via device code flow |
-
-## Field Properties
-
-Each field has: \`name\` (unique identifier), \`description\`, \`type\` (string, number, date, datetime, url, email, json, or enum:val1|val2|val3), \`auto\` (boolean — whether the AI should fill this field), \`instructions\` (how to determine the value), and \`example\`.
-
-## Save Statuses
-
-When saving values, each field returns one of:
-- \`saved\` — value was written successfully
-- \`skipped_already_set\` — field already had a non-empty value (not overwritten)
-- \`rejected_unknown_field\` — field name not found in schema
-- \`rejected_invalid_type\` — value does not match the field's type
-`;
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const INSTRUCTIONS_TEXT = readFileSync(
+  join(__dirname, '..', 'docs', 'Instructions.md'),
+  'utf-8',
+);
 
 export async function createAdapter(): Promise<StorageAdapter> {
   const config = getConfigFromEnv();
