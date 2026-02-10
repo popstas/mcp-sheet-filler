@@ -848,7 +848,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       return { objects, fields };
     },
 
-    async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string }> {
+    async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string; alreadyExists?: boolean }> {
       await ensureValidTokens();
       const client = getSheetsClient();
 
@@ -866,7 +866,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
         if (existingTabs.includes(fieldsTab)) {
           const resolvedDataTab = existingTabs[0] || '';
-          return { fieldsTab, dataTab: resolvedDataTab, keyField, alreadyExists: true };
+          return { fieldsTab, dataTab: resolvedDataTab, keyField: config.objectKeyField, alreadyExists: true };
         }
       } catch (error) {
         if (error instanceof FillerError) throw error;
