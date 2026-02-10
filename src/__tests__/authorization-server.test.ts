@@ -99,6 +99,7 @@ describe('Authorization Server', () => {
     });
 
     it('throws when redirect_uris is missing', () => {
+
       expect(() => registerClient({} as any)).toThrow('redirect_uris is required');
     });
 
@@ -236,6 +237,7 @@ describe('Authorization Server', () => {
       );
 
       // Mock Google token response
+
       (fetch as any).mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -279,6 +281,7 @@ describe('Authorization Server', () => {
         mockAuthConfig
       );
 
+
       (fetch as any).mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -297,7 +300,7 @@ describe('Authorization Server', () => {
       const { clientId, clientSecret, redirectUri } = registerTestClient();
       const { codeVerifier, codeChallenge } = generatePkce();
 
-      const { stateParam } = createPendingGoogleAuth(
+      const { stateParam: _stateParam } = createPendingGoogleAuth(
         {
           clientId,
           redirectUri,
@@ -377,7 +380,7 @@ describe('Authorization Server', () => {
     });
 
     it('rejects wrong client_id', () => {
-      const { clientId, clientSecret, redirectUri } = registerTestClient();
+      const { clientId, clientSecret: _clientSecret, redirectUri } = registerTestClient();
       const { codeVerifier, codeChallenge } = generatePkce();
 
       // Register a second client
@@ -601,6 +604,7 @@ describe('Authorization Server', () => {
         googleRefreshToken: 'expired-google-refresh',
         createdAt: Date.now(),
       });
+
 
       (fetch as any).mockResolvedValueOnce({
         ok: false,

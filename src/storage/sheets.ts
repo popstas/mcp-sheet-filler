@@ -454,15 +454,6 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     }
   }
 
-  // Helper to find column index by header name
-  async function getColumnIndex(headers: string[], fieldName: string): Promise<number> {
-    const index = headers.indexOf(fieldName);
-    if (index === -1) {
-      throw new FillerError('field_not_found', `Column "${fieldName}" not found in data sheet`);
-    }
-    return index;
-  }
-
   const adapter: StorageAdapter = {
     async listFields(names?: string[]): Promise<Field[]> {
       let fields: Field[];

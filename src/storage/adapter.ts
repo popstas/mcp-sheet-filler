@@ -1,4 +1,4 @@
-import type { Field, DataObject, SaveStatus } from '../types.js';
+import type { Field, DataObject } from '../types.js';
 import type { OAuthTokens } from '../auth/oauth.js';
 
 export type AuthMethod = 'oauth' | 'service_account' | 'adc';

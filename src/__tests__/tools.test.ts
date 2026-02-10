@@ -7,8 +7,8 @@ import { FillerError } from '../types.js';
 
 // In-memory mock adapter for testing
 function createMockAdapter(objectKeyField: string = 'name'): StorageAdapter {
-  let fields: Field[] = [];
-  let objects: Map<string, DataObject> = new Map();
+  const fields: Field[] = [];
+  const objects: Map<string, DataObject> = new Map();
 
   return {
     async listFields(names?: string[]): Promise<Field[]> {

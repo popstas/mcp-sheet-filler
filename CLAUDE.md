@@ -16,6 +16,7 @@ npm run dev:http     # Run in dev mode (tsx, HTTP)
 npm start            # Start MCP server (stdio)
 npm run start:http   # Start MCP server (HTTP)
 npm run auth         # Run OAuth authentication flow
+npm run lint         # Run ESLint
 npm test             # Run tests in watch mode (vitest)
 npm run test:run     # Run tests once
 npm test -- src/path/to/test.ts  # Run single test file
