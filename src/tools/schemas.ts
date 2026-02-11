@@ -63,6 +63,11 @@ export const getNextMissingFieldsObjectsSchema = z.object({
     .optional()
     .default(true)
     .describe('Include field metadata in response'),
+  skip_filled_fields: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Skip already-filled field values from object response'),
 });
 
 export const useSheetIdSchema = z.object({

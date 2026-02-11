@@ -248,7 +248,7 @@ export const handlers = {
   >,
 
   filler_get_next_missing_fields_objects: (async (args, adapter) => {
-    const { limit, include_field_meta } = getNextMissingFieldsObjectsSchema.parse(args);
+    const { limit, include_field_meta, skip_filled_fields } = getNextMissingFieldsObjectsSchema.parse(args);
 
     let fields: Field[];
     let objects: { name: string; values: Record<string, string> }[];
@@ -294,7 +294,10 @@ export const handlers = {
             return { name: f.name };
           });
 
-          collected.push({ object: obj, missing });
+          const objectData = skip_filled_fields
+            ? { name: obj.name, values: {} as Record<string, string> }
+            : obj;
+          collected.push({ object: objectData, missing });
         }
       }
     }

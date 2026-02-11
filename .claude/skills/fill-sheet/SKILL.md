@@ -74,6 +74,8 @@ filler_get_next_missing_fields_objects({ limit: 1 })
 ```
 Returns objects with missing auto fields (default limit 1). If `found: false`, all objects are complete.
 
+Pass `skip_filled_fields: true` to omit already-filled values from `object.values`, reducing response size for sheets with many columns.
+
 **Option B: Get specific objects by name**
 ```
 filler_get_objects_by_name({ names: ["Acme Corp"] })

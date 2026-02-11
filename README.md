@@ -197,8 +197,10 @@ Returns status for each field per object:
 Get objects that have missing auto-fill fields (default limit 1).
 
 ```json
-{ "limit": 1, "include_field_meta": true }
+{ "limit": 1, "include_field_meta": true, "skip_filled_fields": false }
 ```
+
+- `skip_filled_fields` — when `true`, omits already-filled field values from `object.values` (returns `{}`), reducing response size for wide sheets
 
 Returns `{ found, objects, count, remain }` — use this to process objects one by one or in batches.
 

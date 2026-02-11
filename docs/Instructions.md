@@ -16,7 +16,7 @@
 4. Call `filler_save_objects_no_overwrite` with `objects: [{ name, values }]` to save values (existing non-empty values are never overwritten).
 5. Repeat from step 1 until no more objects need filling.
 
-Use a higher `limit` with `filler_get_next_missing_fields_objects` to get multiple objects at once.
+Use a higher `limit` with `filler_get_next_missing_fields_objects` to get multiple objects at once. Pass `skip_filled_fields: true` to omit already-filled values from the response, reducing token usage for wide sheets.
 
 ## Main Tools
 

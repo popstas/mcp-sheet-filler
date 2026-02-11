@@ -526,6 +526,21 @@ describe('Tool Handlers', () => {
       expect(result.remain).toBe(3);
     });
 
+    it('respects skip_filled_fields=true', async () => {
+      await adapter.addObjectByName('acme');
+      await adapter.updateObjectFields('acme', { email: 'info@acme.com' });
+
+      const result = await handlers.filler_get_next_missing_fields_objects(
+        { limit: 1, skip_filled_fields: true },
+        adapter
+      );
+
+      expect(result.found).toBe(true);
+      expect(result.objects[0].object.name).toBe('acme');
+      expect(result.objects[0].object.values).toEqual({});
+      expect(result.objects[0].missing.length).toBeGreaterThan(0);
+    });
+
     it('returns count=0 remain=0 when none unfilled', async () => {
       await adapter.addObjectByName('filled');
       await adapter.updateObjectFields('filled', {
