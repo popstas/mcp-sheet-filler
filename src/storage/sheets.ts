@@ -106,8 +106,18 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   let cachedFirstTabName: string | null = null;
   let cachedFirstTabNameSheetId: string | null = null;
 
+  function requireSheetId(): void {
+    if (!state.spreadsheetId) {
+      throw new FillerError(
+        'backend_not_configured',
+        'No Google Sheet configured. Use filler_use_sheet_id tool to set a sheet URL or ID.'
+      );
+    }
+  }
+
   // Resolve first tab name from spreadsheet metadata (with caching)
   async function getFirstTabName(): Promise<string> {
+    requireSheetId();
     // Return cached value if spreadsheet hasn't changed
     if (cachedFirstTabName && cachedFirstTabNameSheetId === state.spreadsheetId) {
       return cachedFirstTabName;
@@ -377,6 +387,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   // Helper to get all rows from a sheet
   async function getSheetData(sheetName: string): Promise<string[][]> {
+    requireSheetId();
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
@@ -398,6 +409,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   // Helper to get only headers (first row) from a sheet
   async function getSheetHeaders(sheetName: string): Promise<string[]> {
+    requireSheetId();
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
@@ -425,6 +437,7 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
   // Helper to batch read multiple sheet ranges in a single API call
   async function batchGetSheetData(ranges: string[]): Promise<Map<string, string[][]>> {
+    requireSheetId();
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
