@@ -35,6 +35,7 @@ USER node
 
 # Копируем билд и сразу выставляем владельца на node
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chown=node:node docs ./docs
 
 EXPOSE 3000
 
