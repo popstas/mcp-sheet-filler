@@ -4,7 +4,7 @@ import express, { type Request, type Response } from 'express';
 import { createAdapter, createServer } from '../server.js';
 import { logger } from '../logger.js';
 import { handlers } from '../tools/index.js';
-import { requestContext } from '../context.js';
+import { requestContext, type RequestContext } from '../context.js';
 import { getConfigFromEnv } from '../storage/adapter.js';
 import type { AuthConfig } from '../auth/types.js';
 import { generateProtectedResourceMetadata, getMetadataUrl } from '../auth/metadata.js';
@@ -133,43 +133,47 @@ export async function startHttpServer(): Promise<void> {
 
   // MCP endpoint: GET (SSE stream), POST (JSON-RPC), DELETE (session teardown)
   app.all('/mcp', async (req: Request, res: Response) => {
-    // Authenticate the request
-    const auth = await authenticateRequest(req, res, authConfig);
-    if (!auth) {
-      return; // 401 already sent
-    }
-
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
-    logger.debug('http_request', {
-      method: req.method,
-      userId: auth.userId,
-      email: auth.email,
-      sessionId,
-      body: req.method === 'POST' ? req.body?.method : undefined,
-    });
 
-    // Log response status when finished
-    res.on('finish', () => {
-      if (res.statusCode >= 400) {
-        logger.error('http_response_error', {
-          method: req.method,
-          userId: auth.userId,
-          sessionId,
-          statusCode: res.statusCode,
-          body: req.method === 'POST' ? req.body?.method : undefined,
-        });
-      } else {
-        logger.debug('http_response', {
-          method: req.method,
-          userId: auth.userId,
-          sessionId,
-          statusCode: res.statusCode,
-        });
+    // Wrap entire handler in request context so all logs (including auth) get sessionId
+    const ctx = { userId: '', sessionId: sessionId ?? undefined } as RequestContext;
+    await requestContext.run(ctx, async () => {
+      // Authenticate the request
+      const auth = await authenticateRequest(req, res, authConfig);
+      if (!auth) {
+        return; // 401 already sent
       }
-    });
 
-    // Run request handler within user context (includes access token for Sheets API)
-    await requestContext.run({ userId: auth.userId, email: auth.email, accessToken: auth.accessToken }, async () => {
+      // Update context with auth info
+      ctx.userId = auth.userId;
+      ctx.email = auth.email;
+      ctx.accessToken = auth.accessToken;
+
+      logger.debug('http_request', {
+        method: req.method,
+        userId: auth.userId,
+        email: auth.email,
+        body: req.method === 'POST' ? req.body?.method : undefined,
+      });
+
+      // Log response status when finished
+      res.on('finish', () => {
+        if (res.statusCode >= 400) {
+          logger.error('http_response_error', {
+            method: req.method,
+            userId: auth.userId,
+            statusCode: res.statusCode,
+            body: req.method === 'POST' ? req.body?.method : undefined,
+          });
+        } else {
+          logger.debug('http_response', {
+            method: req.method,
+            userId: auth.userId,
+            statusCode: res.statusCode,
+          });
+        }
+      });
+
       try {
         if (disableSession) {
           // Stateless mode: new transport + server per request
@@ -218,7 +222,6 @@ export async function startHttpServer(): Promise<void> {
         logger.error('http_request_error', {
           method: req.method,
           userId: auth.userId,
-          sessionId,
           error: error instanceof Error ? error.message : String(error),
         });
         if (!res.headersSent) {

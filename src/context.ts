@@ -5,6 +5,8 @@ export interface RequestContext {
   email?: string;
   /** Access token from MCP auth - can be reused for Google Sheets API */
   accessToken?: string;
+  /** MCP session ID (from Mcp-Session-Id header in HTTP transport) */
+  sessionId?: string;
 }
 
 // Global context storage for request-scoped user identification
@@ -29,6 +31,16 @@ export function getCurrentUserId(): string {
 export function getCurrentAccessToken(): string | undefined {
   const store = requestContext.getStore();
   return store?.accessToken;
+}
+
+/**
+ * Get the current session ID from the request context (truncated to 8 chars).
+ * Returns undefined if no context or no session ID is set.
+ */
+export function getCurrentSessionId(): string | undefined {
+  const store = requestContext.getStore();
+  const sid = store?.sessionId;
+  return sid ? sid.slice(0, 8) : undefined;
 }
 
 /**

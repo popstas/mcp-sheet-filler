@@ -14,6 +14,8 @@ This guide covers deploying the MCP Sheet Filler server in HTTP mode and connect
    GOOGLE_SHEET_ID=xxx                        # Your Google Sheet ID
    TRANSPORT=http
    AUTH_DB_PATH=data/auth.db                  # Optional: persist OAuth state across restarts
+   DEBUG_LOG=/data/debug.log                   # Optional: write debug logs to file
+   LOG_MASK_PRIVATE=true                       # Optional: mask private data in debug logs
    ```
 
 ## Starting the Server
@@ -32,6 +34,8 @@ docker run -p 3000:3000 \
   -e GOOGLE_OAUTH_CLIENT_ID=your-client-id \
   -e GOOGLE_OAUTH_CLIENT_SECRET=your-client-secret \
   -e AUTH_DB_PATH=/data/auth.db \
+  -e DEBUG_LOG=/data/debug.log \
+  -e LOG_MASK_PRIVATE=true \
   -v filler-data:/data \
   mcp-sheet-filler
 ```

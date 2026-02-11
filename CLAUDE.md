@@ -144,6 +144,7 @@ Common:
 - `PORT` = HTTP server port (default: `3000`)
 - `HOST` = HTTP bind address (default: `0.0.0.0`)
 - `RESOURCE_URL` = public URL of this server (required for HTTP transport)
+- `LOG_MASK_PRIVATE` = `true` to mask private data (sheet IDs, object names, URLs, etc.) in debug logs
 - `AUTH_DB_PATH` = path to SQLite database for OAuth persistence (default: `:memory:`)
 
 Google Sheets:
