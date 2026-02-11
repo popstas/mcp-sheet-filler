@@ -44,6 +44,8 @@ export const saveObjectsNoOverwriteSchema = z.object({
       z.object({
         name: z.string().describe('Object name'),
         values: z.record(z.string(), z.string()).describe('Field values to save'),
+        comments: z.record(z.string(), z.string()).optional()
+          .describe('Optional cell notes per field (only written when field value is saved)'),
       })
     )
     .min(1)

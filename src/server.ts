@@ -93,7 +93,7 @@ const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
     },
   },
   filler_save_objects_no_overwrite: {
-    description: 'Save field values for multiple objects at once without overwriting existing non-empty values',
+    description: 'Save field values for multiple objects at once without overwriting existing non-empty values. Optionally attach cell notes per field (only written when field value is saved).',
     inputSchema: saveObjectsNoOverwriteSchema,
     annotations: {
       title: 'Save Objects Batch (No Overwrite)',

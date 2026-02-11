@@ -33,6 +33,10 @@ export interface StorageAdapter {
   ): Promise<void>;
   addFields?(fields: Field[]): Promise<void>;
   addObjectsByName?(names: string[]): Promise<void>;
+  batchSetCellNotes?(
+    notes: Array<{ name: string; comments: Record<string, string> }>,
+    fields: Field[]
+  ): Promise<void>;
 }
 
 export interface StorageConfig {

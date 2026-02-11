@@ -370,6 +370,109 @@ describe('Tool Handlers', () => {
       });
     });
 
+    it('accepts comments without errors when adapter lacks batchSetCellNotes', async () => {
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'globex', values: { email: 'info@globex.com' }, comments: { email: 'Source: website' } },
+          ],
+        },
+        adapter
+      );
+
+      expect(result.results.globex).toEqual({ email: 'saved' });
+    });
+
+    it('calls batchSetCellNotes when adapter supports it', async () => {
+      const notesCalls: Array<{ notes: Array<{ name: string; comments: Record<string, string> }>; fields: Field[] }> = [];
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async batchSetCellNotes(notes, fields) {
+          notesCalls.push({ notes, fields });
+        },
+      };
+
+      await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'globex', values: { email: 'info@globex.com' }, comments: { email: 'Source: website' } },
+          ],
+        },
+        mockAdapter
+      );
+
+      expect(notesCalls).toHaveLength(1);
+      expect(notesCalls[0].notes).toEqual([
+        { name: 'globex', comments: { email: 'Source: website' } },
+      ]);
+    });
+
+    it('does not write comments for skipped_already_set fields', async () => {
+      const notesCalls: unknown[] = [];
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async batchSetCellNotes(notes, fields) {
+          notesCalls.push({ notes, fields });
+        },
+      };
+
+      // acme already has email set
+      const result = await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'acme', values: { email: 'new@acme.com' }, comments: { email: 'Should not be written' } },
+          ],
+        },
+        mockAdapter
+      );
+
+      expect(result.results.acme).toEqual({ email: 'skipped_already_set' });
+      expect(notesCalls).toHaveLength(0);
+    });
+
+    it('silently ignores comments for unknown fields', async () => {
+      const notesCalls: unknown[] = [];
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async batchSetCellNotes(notes, fields) {
+          notesCalls.push({ notes, fields });
+        },
+      };
+
+      await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'globex', values: { unknown_field: 'val' }, comments: { unknown_field: 'Note' } },
+          ],
+        },
+        mockAdapter
+      );
+
+      // unknown_field is rejected_unknown_field, so comment should not be written
+      expect(notesCalls).toHaveLength(0);
+    });
+
+    it('does not call batchSetCellNotes when no comments provided', async () => {
+      const notesCalls: unknown[] = [];
+      const mockAdapter: StorageAdapter = {
+        ...adapter,
+        async batchSetCellNotes(notes, fields) {
+          notesCalls.push({ notes, fields });
+        },
+      };
+
+      await handlers.filler_save_objects_no_overwrite(
+        {
+          objects: [
+            { name: 'globex', values: { email: 'info@globex.com' } },
+          ],
+        },
+        mockAdapter
+      );
+
+      expect(notesCalls).toHaveLength(0);
+    });
+
     it('handles mixed results across objects', async () => {
       const result = await handlers.filler_save_objects_no_overwrite(
         {

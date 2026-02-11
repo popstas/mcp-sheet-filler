@@ -105,6 +105,9 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
   // Cache for first tab name (keyed by spreadsheet ID)
   let cachedFirstTabName: string | null = null;
   let cachedFirstTabNameSheetId: string | null = null;
+  // Cache for numeric sheet IDs (tab name → numeric sheetId)
+  let cachedTabSheetIds: Map<string, number> | null = null;
+  let cachedTabSheetIdsSpreadsheetId: string | null = null;
 
   function requireSheetId(): void {
     if (!state.spreadsheetId) {
@@ -128,11 +131,10 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     try {
       const spreadsheet = await client.spreadsheets.get({
         spreadsheetId: state.spreadsheetId,
-        fields: 'sheets.properties.title',
+        fields: 'sheets.properties(title,sheetId)',
       });
-      const tabs = (spreadsheet.data.sheets || []).map(
-        (s) => s.properties?.title || ''
-      );
+      const sheetsList = spreadsheet.data.sheets || [];
+      const tabs = sheetsList.map((s) => s.properties?.title || '');
       if (tabs.length === 0) {
         throw new FillerError('storage_error', 'Spreadsheet has no tabs');
       }
@@ -140,6 +142,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       // Cache the result
       cachedFirstTabName = firstTab;
       cachedFirstTabNameSheetId = state.spreadsheetId;
+      // Cache numeric sheet IDs
+      cachedTabSheetIds = new Map();
+      cachedTabSheetIdsSpreadsheetId = state.spreadsheetId;
+      for (const s of sheetsList) {
+        const title = s.properties?.title || '';
+        const id = s.properties?.sheetId;
+        if (title && id != null) {
+          cachedTabSheetIds.set(title, id);
+        }
+      }
       return firstTab;
     } catch (error) {
       if (error instanceof FillerError) throw error;
@@ -162,6 +174,22 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     }
     dataTab = firstTab;
     return firstTab;
+  }
+
+  // Get numeric sheet ID for a tab name (populates cache via getFirstTabName if needed)
+  async function getNumericSheetId(tabName: string): Promise<number> {
+    // If cache is valid for current spreadsheet, use it
+    if (cachedTabSheetIds && cachedTabSheetIdsSpreadsheetId === state.spreadsheetId) {
+      const id = cachedTabSheetIds.get(tabName);
+      if (id !== undefined) return id;
+    }
+    // Trigger metadata fetch (populates cachedTabSheetIds)
+    await getFirstTabName();
+    const id = cachedTabSheetIds?.get(tabName);
+    if (id === undefined) {
+      throw new FillerError('storage_error', `Tab "${tabName}" not found in spreadsheet`);
+    }
+    return id;
   }
 
   // Mutable sheets client - will be recreated when auth changes
@@ -1046,6 +1074,91 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       }
     },
 
+    async batchSetCellNotes(
+      notes: Array<{ name: string; comments: Record<string, string> }>,
+      _fields: Field[]
+    ): Promise<void> {
+      if (notes.length === 0) return;
+
+      await ensureValidTokens();
+      const client = getSheetsClient();
+      const resolvedDataTab = await resolveDataTab();
+
+      logger.debug('sheets_batch_set_cell_notes', {
+        objectCount: notes.length,
+        totalNotes: notes.reduce((sum, n) => sum + Object.keys(n.comments).length, 0),
+      });
+
+      // Read data sheet to build row/column index maps
+      const data = await getSheetData(resolvedDataTab);
+      if (data.length === 0) return;
+
+      const headers = data[0];
+      if (headers.length === 0) return;
+
+      // Build row index map (name → 0-based row index in grid)
+      const keyColIndex = 0;
+      const rowIndexMap = new Map<string, number>();
+      for (let i = 1; i < data.length; i++) {
+        const name = data[i][keyColIndex];
+        if (name) {
+          rowIndexMap.set(name, i); // 0-based for updateCells
+        }
+      }
+
+      // Build column index map
+      const colIndexMap = new Map<string, number>();
+      for (let j = 0; j < headers.length; j++) {
+        if (headers[j]) {
+          colIndexMap.set(headers[j], j);
+        }
+      }
+
+      // Get numeric sheet ID for batchUpdate
+      const numericSheetId = await getNumericSheetId(resolvedDataTab);
+
+      // Build updateCells requests
+      const requests: sheets_v4.Schema$Request[] = [];
+
+      for (const { name, comments } of notes) {
+        const rowIndex = rowIndexMap.get(name);
+        if (rowIndex === undefined) continue;
+
+        for (const [fieldName, comment] of Object.entries(comments)) {
+          const colIndex = colIndexMap.get(fieldName);
+          if (colIndex === undefined) continue;
+
+          requests.push({
+            updateCells: {
+              rows: [{
+                values: [{
+                  note: comment,
+                }],
+              }],
+              fields: 'note',
+              start: {
+                sheetId: numericSheetId,
+                rowIndex,
+                columnIndex: colIndex,
+              },
+            },
+          });
+        }
+      }
+
+      if (requests.length > 0) {
+        try {
+          await client.spreadsheets.batchUpdate({
+            spreadsheetId: state.spreadsheetId,
+            requestBody: { requests },
+          });
+        } catch (error: unknown) {
+          const err = error as { message?: string };
+          throw new FillerError('storage_error', `Failed to set cell notes: ${err.message}`);
+        }
+      }
+    },
+
     async initSheet(): Promise<{ fieldsTab: string; dataTab: string; keyField: string; alreadyExists?: boolean }> {
       await ensureValidTokens();
       const client = getSheetsClient();
@@ -1144,6 +1257,8 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       dataTab = config.sheetTabData;
       cachedFirstTabName = null;
       cachedFirstTabNameSheetId = null;
+      cachedTabSheetIds = null;
+      cachedTabSheetIdsSpreadsheetId = null;
     },
 
     getSheetId(): string {

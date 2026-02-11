@@ -240,6 +240,30 @@ export const handlers = {
       }
     }
 
+    // Write cell notes for fields that were saved
+    const pendingNotes: Array<{ name: string; comments: Record<string, string> }> = [];
+
+    for (const { name, comments } of inputObjects) {
+      if (!comments || Object.keys(comments).length === 0) continue;
+
+      const fieldResults = results[name];
+      if (!fieldResults || 'error' in fieldResults) continue;
+
+      const savedComments: Record<string, string> = {};
+      for (const [fieldName, comment] of Object.entries(comments)) {
+        if (fieldResults[fieldName] === 'saved') {
+          savedComments[fieldName] = comment;
+        }
+      }
+      if (Object.keys(savedComments).length > 0) {
+        pendingNotes.push({ name, comments: savedComments });
+      }
+    }
+
+    if (pendingNotes.length > 0 && adapter.batchSetCellNotes) {
+      await adapter.batchSetCellNotes(pendingNotes, fields);
+    }
+
     logger.info('tool_save_objects_result', { count: inputObjects.length });
     return { results };
   }) as ToolHandler<
