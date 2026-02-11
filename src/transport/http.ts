@@ -11,6 +11,7 @@ import { generateProtectedResourceMetadata, getMetadataUrl } from '../auth/metad
 import { validateGoogleToken } from '../auth/token-validator.js';
 import { createAuthorizationServerRouter } from '../auth/authorization-server-routes.js';
 import { cleanupExpired } from '../auth/authorization-server.js';
+import { getHealthData, cleanupStaleUsers } from '../rate-limit/index.js';
 
 /**
  * Get auth configuration from environment.
@@ -115,7 +116,7 @@ export async function startHttpServer(): Promise<void> {
 
   // Health check endpoint (no auth required)
   app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', ...getHealthData() });
   });
 
   // Protected Resource Metadata endpoint (RFC 9728)
@@ -130,6 +131,14 @@ export async function startHttpServer(): Promise<void> {
 
   // Periodic cleanup of expired authorization entries (every 5 minutes)
   const cleanupInterval = setInterval(cleanupExpired, 5 * 60 * 1000);
+
+  // Periodic cleanup of stale user rate-limit metrics (every 60 seconds)
+  const metricsCleanupInterval = setInterval(() => {
+    const result = cleanupStaleUsers();
+    if (result.removedUsers > 0) {
+      logger.debug('rate.cleanup', result);
+    }
+  }, 60_000);
 
   // MCP endpoint: GET (SSE stream), POST (JSON-RPC), DELETE (session teardown)
   app.all('/mcp', async (req: Request, res: Response) => {
@@ -251,6 +260,7 @@ export async function startHttpServer(): Promise<void> {
   const shutdown = () => {
     console.log('\nShutting down...');
     clearInterval(cleanupInterval);
+    clearInterval(metricsCleanupInterval);
     httpServer.close(() => {
       logger.info('server_stopped', { transport: 'http' });
       process.exit(0);

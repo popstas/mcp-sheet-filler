@@ -67,6 +67,10 @@ export const logger = {
     writeLog('info', message, data);
   },
 
+  warn(message: string, data?: unknown): void {
+    writeLog('warn', message, data);
+  },
+
   error(message: string, data?: unknown): void {
     writeLog('error', message, data);
   },

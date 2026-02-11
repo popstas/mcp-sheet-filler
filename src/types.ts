@@ -28,7 +28,8 @@ export type ErrorCode =
   | 'storage_error'
   | 'unauthorized'
   | 'invalid_token'
-  | 'insufficient_scope';
+  | 'insufficient_scope'
+  | 'rate_limited';
 
 export interface AppError {
   code: ErrorCode;

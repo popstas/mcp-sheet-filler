@@ -14,6 +14,7 @@ import {
 } from '../auth/oauth.js';
 import { logger } from '../logger.js';
 import { getCurrentUserId, getCurrentAccessToken } from '../context.js';
+import { sheetsRequest } from '../rate-limit/index.js';
 import fs from 'fs';
 
 // Field columns in the fields sheet (0-indexed)
@@ -129,10 +130,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
-      const spreadsheet = await client.spreadsheets.get({
-        spreadsheetId: state.spreadsheetId,
-        fields: 'sheets.properties(title,sheetId)',
-      });
+      const spreadsheet = await sheetsRequest('read', getCurrentUserId(), () =>
+        client.spreadsheets.get({
+          spreadsheetId: state.spreadsheetId,
+          fields: 'sheets.properties(title,sheetId)',
+        })
+      );
       const sheetsList = spreadsheet.data.sheets || [];
       const tabs = sheetsList.map((s) => s.properties?.title || '');
       if (tabs.length === 0) {
@@ -419,10 +422,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
-      const response = await client.spreadsheets.values.get({
-        spreadsheetId: state.spreadsheetId,
-        range: sheetName,
-      });
+      const response = await sheetsRequest('read', getCurrentUserId(), () =>
+        client.spreadsheets.values.get({
+          spreadsheetId: state.spreadsheetId,
+          range: sheetName,
+        })
+      );
       const rows = (response.data.values as string[][]) || [];
       logger.debug('sheets_get_data', { tab: sheetName, rowCount: rows.length });
       return rows;
@@ -441,10 +446,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
-      const response = await client.spreadsheets.values.get({
-        spreadsheetId: state.spreadsheetId,
-        range: `${sheetName}!1:1`, // Only first row
-      });
+      const response = await sheetsRequest('read', getCurrentUserId(), () =>
+        client.spreadsheets.values.get({
+          spreadsheetId: state.spreadsheetId,
+          range: `${sheetName}!1:1`, // Only first row
+        })
+      );
       const headers = (response.data.values?.[0] as string[]) || [];
       logger.debug('sheets_get_headers', { tab: sheetName, headerCount: headers.length });
       return headers;
@@ -469,10 +476,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
     await ensureValidTokens();
     const client = getSheetsClient();
     try {
-      const response = await client.spreadsheets.values.batchGet({
-        spreadsheetId: state.spreadsheetId,
-        ranges: ranges, // Например: ['Sheet1', 'fields']
-      });
+      const response = await sheetsRequest('read', getCurrentUserId(), () =>
+        client.spreadsheets.values.batchGet({
+          spreadsheetId: state.spreadsheetId,
+          ranges: ranges,
+        })
+      );
 
       // Преобразовать в Map: ключ = имя листа, значение = данные
       const result = new Map<string, string[][]>();
@@ -550,14 +559,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       ];
 
       try {
-        await client.spreadsheets.values.append({
-          spreadsheetId: state.spreadsheetId,
-          range: `${fieldsTab}!A:F`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: [row],
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.append({
+            spreadsheetId: state.spreadsheetId,
+            range: `${fieldsTab}!A:F`,
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: [row],
+            },
+          })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to add field: ${err.message}`);
@@ -569,14 +580,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       if (!headers.includes(field.name)) {
         const colIndex = headers.length;
         const colLetter = columnIndexToLetter(colIndex);
-        await client.spreadsheets.values.update({
-          spreadsheetId: state.spreadsheetId,
-          range: `${resolvedDataTab}!${colLetter}1`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: [[field.name]],
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.update({
+            spreadsheetId: state.spreadsheetId,
+            range: `${resolvedDataTab}!${colLetter}1`,
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: [[field.name]],
+            },
+          })
+        );
       }
     },
 
@@ -667,14 +680,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       row[keyColIndex] = name;
 
       try {
-        await client.spreadsheets.values.append({
-          spreadsheetId: state.spreadsheetId,
-          range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: [row],
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.append({
+            spreadsheetId: state.spreadsheetId,
+            range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: [row],
+            },
+          })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to add object: ${err.message}`);
@@ -759,13 +774,15 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       if (updateData.length > 0) {
         try {
-          await client.spreadsheets.values.batchUpdate({
-            spreadsheetId: state.spreadsheetId,
-            requestBody: {
-              valueInputOption: 'RAW',
-              data: updateData,
-            },
-          });
+          await sheetsRequest('write', getCurrentUserId(), () =>
+            client.spreadsheets.values.batchUpdate({
+              spreadsheetId: state.spreadsheetId,
+              requestBody: {
+                valueInputOption: 'RAW',
+                data: updateData,
+              },
+            })
+          );
         } catch (error: unknown) {
           const err = error as { message?: string };
           throw new FillerError('storage_error', `Failed to update object: ${err.message}`);
@@ -778,10 +795,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       await ensureValidTokens();
       const client = getSheetsClient();
       try {
-        const response = await client.spreadsheets.values.get({
-          spreadsheetId: state.spreadsheetId,
-          range: `${fieldsTab}!A:A`, // Only column A (name column)
-        });
+        const response = await sheetsRequest('read', getCurrentUserId(), () =>
+          client.spreadsheets.values.get({
+            spreadsheetId: state.spreadsheetId,
+            range: `${fieldsTab}!A:A`, // Only column A (name column)
+          })
+        );
         const rows = (response.data.values as string[][]) || [];
         // Skip header row and filter out empty names
         const names = rows.slice(1).map((row) => row[0]?.trim() || '').filter((name) => name);
@@ -960,13 +979,15 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       if (updateData.length > 0) {
         try {
-          await client.spreadsheets.values.batchUpdate({
-            spreadsheetId: state.spreadsheetId,
-            requestBody: {
-              valueInputOption: 'RAW',
-              data: updateData,
-            },
-          });
+          await sheetsRequest('write', getCurrentUserId(), () =>
+            client.spreadsheets.values.batchUpdate({
+              spreadsheetId: state.spreadsheetId,
+              requestBody: {
+                valueInputOption: 'RAW',
+                data: updateData,
+              },
+            })
+          );
         } catch (error: unknown) {
           const err = error as { message?: string };
           throw new FillerError('storage_error', `Failed to batch update objects: ${err.message}`);
@@ -992,14 +1013,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       ]);
 
       try {
-        await client.spreadsheets.values.append({
-          spreadsheetId: state.spreadsheetId,
-          range: `${fieldsTab}!A:F`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: rows,
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.append({
+            spreadsheetId: state.spreadsheetId,
+            range: `${fieldsTab}!A:F`,
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: rows,
+            },
+          })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to add fields: ${err.message}`);
@@ -1026,13 +1049,15 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
         });
 
         try {
-          await client.spreadsheets.values.batchUpdate({
-            spreadsheetId: state.spreadsheetId,
-            requestBody: {
-              valueInputOption: 'RAW',
-              data: updateData,
-            },
-          });
+          await sheetsRequest('write', getCurrentUserId(), () =>
+            client.spreadsheets.values.batchUpdate({
+              spreadsheetId: state.spreadsheetId,
+              requestBody: {
+                valueInputOption: 'RAW',
+                data: updateData,
+              },
+            })
+          );
         } catch (error: unknown) {
           const err = error as { message?: string };
           throw new FillerError('storage_error', `Failed to add column headers: ${err.message}`);
@@ -1060,14 +1085,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       });
 
       try {
-        await client.spreadsheets.values.append({
-          spreadsheetId: state.spreadsheetId,
-          range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
-          valueInputOption: 'RAW',
-          requestBody: {
-            values: rows,
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.append({
+            spreadsheetId: state.spreadsheetId,
+            range: `${resolvedDataTab}!A:${columnIndexToLetter(headers.length - 1)}`,
+            valueInputOption: 'RAW',
+            requestBody: {
+              values: rows,
+            },
+          })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to add objects: ${err.message}`);
@@ -1148,10 +1175,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       if (requests.length > 0) {
         try {
-          await client.spreadsheets.batchUpdate({
-            spreadsheetId: state.spreadsheetId,
-            requestBody: { requests },
-          });
+          await sheetsRequest('write', getCurrentUserId(), () =>
+            client.spreadsheets.batchUpdate({
+              spreadsheetId: state.spreadsheetId,
+              requestBody: { requests },
+            })
+          );
         } catch (error: unknown) {
           const err = error as { message?: string };
           throw new FillerError('storage_error', `Failed to set cell notes: ${err.message}`);
@@ -1166,10 +1195,12 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       let existingTabs: string[];
       // Get existing tabs
       try {
-        const spreadsheet = await client.spreadsheets.get({
-          spreadsheetId: state.spreadsheetId,
-          fields: 'sheets.properties.title',
-        });
+        const spreadsheet = await sheetsRequest('read', getCurrentUserId(), () =>
+          client.spreadsheets.get({
+            spreadsheetId: state.spreadsheetId,
+            fields: 'sheets.properties.title',
+          })
+        );
 
         existingTabs = (spreadsheet.data.sheets || []).map(
           (s) => s.properties?.title || ''
@@ -1206,14 +1237,16 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
 
       // Create fields tab only
       try {
-        await client.spreadsheets.batchUpdate({
-          spreadsheetId: state.spreadsheetId,
-          requestBody: {
-            requests: [
-              { addSheet: { properties: { title: fieldsTab } } },
-            ],
-          },
-        });
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.batchUpdate({
+            spreadsheetId: state.spreadsheetId,
+            requestBody: {
+              requests: [
+                { addSheet: { properties: { title: fieldsTab } } },
+              ],
+            },
+          })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to create fields tab: ${err.message}`);
@@ -1230,18 +1263,20 @@ export function createSheetsAdapter(config: StorageConfig): StorageAdapter {
       ]);
 
       try {
-        await client.spreadsheets.values.batchUpdate({
-          spreadsheetId: state.spreadsheetId,
-          requestBody: {
-            valueInputOption: 'RAW',
-            data: [
-              {
-                range: `${fieldsTab}!A1:F${1 + fieldRows.length}`,
-                values: [FIELD_HEADERS, ...fieldRows],
+        await sheetsRequest('write', getCurrentUserId(), () =>
+          client.spreadsheets.values.batchUpdate({
+            spreadsheetId: state.spreadsheetId,
+            requestBody: {
+              valueInputOption: 'RAW',
+              data: [
+                {
+                  range: `${fieldsTab}!A1:F${1 + fieldRows.length}`,
+                  values: [FIELD_HEADERS, ...fieldRows],
               },
             ],
           },
-        });
+        })
+        );
       } catch (error: unknown) {
         const err = error as { message?: string };
         throw new FillerError('storage_error', `Failed to write fields: ${err.message}`);
