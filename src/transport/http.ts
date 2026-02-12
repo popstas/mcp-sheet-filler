@@ -201,6 +201,10 @@ export async function startHttpServer(): Promise<void> {
           // New session: create transport + server, store by session ID
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
+            onsessioninitialized: (sessionId) => {
+              sessions.set(sessionId, transport);
+              logger.debug('session_created', { sessionId });
+            },
           });
 
           transport.onclose = () => {
@@ -213,12 +217,6 @@ export async function startHttpServer(): Promise<void> {
           const sessionServer = createServer(adapter, ['filler_google_auth']);
           await sessionServer.connect(transport);
           await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
-
-          // Store after first handleRequest (session ID is assigned during initialize)
-          if (transport.sessionId) {
-            sessions.set(transport.sessionId, transport);
-            logger.debug('session_created', { sessionId: transport.sessionId });
-          }
         } else {
           // Client sent unknown session ID
           res.status(400).json({
