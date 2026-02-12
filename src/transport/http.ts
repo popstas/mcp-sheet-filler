@@ -120,6 +120,12 @@ export async function startHttpServer(): Promise<void> {
   });
 
   // Protected Resource Metadata endpoint (RFC 9728)
+  // Path-based variant for sub-path resources (Section 3.2)
+  app.get('/.well-known/oauth-protected-resource/mcp', (_req: Request, res: Response) => {
+    const metadata = generateProtectedResourceMetadata(authConfig);
+    res.json(metadata);
+  });
+  // Base route for backward compatibility
   app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
     const metadata = generateProtectedResourceMetadata(authConfig);
     res.json(metadata);
@@ -249,7 +255,7 @@ export async function startHttpServer(): Promise<void> {
     console.log(`MCP HTTP server listening on http://${host}:${port}`);
     console.log(`Health check: ${authConfig.resourceUrl}/health`);
     console.log(`MCP endpoint: ${authConfig.resourceUrl}/mcp`);
-    console.log(`Protected Resource Metadata: ${authConfig.resourceUrl}/.well-known/oauth-protected-resource`);
+    console.log(`Protected Resource Metadata: ${authConfig.resourceUrl}/.well-known/oauth-protected-resource/mcp`);
     console.log(`Authorization Server Metadata: ${authConfig.resourceUrl}/.well-known/oauth-authorization-server`);
     console.log(`Client Registration: ${authConfig.resourceUrl}/auth/register`);
   });

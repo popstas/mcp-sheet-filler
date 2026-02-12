@@ -46,7 +46,7 @@ The server exposes:
 | GET | `/mcp` | SSE stream (requires auth) |
 | DELETE | `/mcp` | Session teardown (requires auth) |
 | GET | `/health` | Health check (no auth) |
-| GET | `/.well-known/oauth-protected-resource` | RFC 9728 Protected Resource Metadata (no auth) |
+| GET | `/.well-known/oauth-protected-resource/mcp` | RFC 9728 Protected Resource Metadata (no auth) |
 
 **Authentication:** Requests to `/mcp` must include a valid Google OAuth access token in the `Authorization: Bearer <token>` header. The token must have been issued for the same OAuth client ID as configured on the server.
 
@@ -54,7 +54,7 @@ Example:
 ```bash
 RESOURCE_URL=https://example.com TRANSPORT=http npm run dev
 curl http://localhost:3000/health
-curl http://localhost:3000/.well-known/oauth-protected-resource
+curl http://localhost:3000/.well-known/oauth-protected-resource/mcp
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ya29.xxx" \

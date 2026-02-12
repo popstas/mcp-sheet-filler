@@ -37,8 +37,8 @@ sequenceDiagram
     participant G as Google
 
     Note over C,S: Discovery
-    C->>S: GET /.well-known/oauth-protected-resource
-    S-->>C: { authorization_servers: ["https://our-server.com"] }
+    C->>S: GET /.well-known/oauth-protected-resource/mcp
+    S-->>C: { resource: "https://our-server.com/mcp", authorization_servers: ["https://our-server.com"] }
     C->>S: GET /.well-known/oauth-authorization-server
     S-->>C: AS metadata (endpoints, PKCE, grant types)
 
@@ -254,7 +254,7 @@ RESOURCE_URL=http://localhost:3000 TRANSPORT=http npm run dev:http
 
 ```bash
 # Protected Resource Metadata (points to our AS)
-curl http://localhost:3000/.well-known/oauth-protected-resource
+curl http://localhost:3000/.well-known/oauth-protected-resource/mcp
 
 # Authorization Server Metadata
 curl http://localhost:3000/.well-known/oauth-authorization-server

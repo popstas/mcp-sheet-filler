@@ -8,9 +8,10 @@ export const GOOGLE_AUTHORIZATION_SERVER = 'https://accounts.google.com';
  * @see https://datatracker.ietf.org/doc/html/rfc9728
  */
 export function generateProtectedResourceMetadata(config: AuthConfig): ProtectedResourceMetadata {
+  const baseUrl = config.resourceUrl.replace(/\/+$/, '');
   return {
-    resource: config.resourceUrl,
-    authorization_servers: [config.resourceUrl],
+    resource: `${baseUrl}/mcp`,
+    authorization_servers: [baseUrl],
     bearer_methods_supported: ['header'],
     scopes_supported: [
       'openid',
@@ -26,5 +27,5 @@ export function generateProtectedResourceMetadata(config: AuthConfig): Protected
 export function getMetadataUrl(resourceUrl: string): string {
   // Ensure no trailing slash before appending path
   const baseUrl = resourceUrl.replace(/\/+$/, '');
-  return `${baseUrl}/.well-known/oauth-protected-resource`;
+  return `${baseUrl}/.well-known/oauth-protected-resource/mcp`;
 }

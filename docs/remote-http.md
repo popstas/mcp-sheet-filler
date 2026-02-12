@@ -48,8 +48,8 @@ curl https://your-server.com/health
 # Returns: {"status":"ok"}
 
 # Protected Resource Metadata (no auth required)
-curl https://your-server.com/.well-known/oauth-protected-resource
-# Returns: {"resource":"https://your-server.com","authorization_servers":["https://accounts.google.com"],"bearer_methods_supported":["header"]}
+curl https://your-server.com/.well-known/oauth-protected-resource/mcp
+# Returns: {"resource":"https://your-server.com/mcp","authorization_servers":["https://your-server.com"],"bearer_methods_supported":["header"]}
 ```
 
 ---
