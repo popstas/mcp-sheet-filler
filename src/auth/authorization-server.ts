@@ -28,9 +28,9 @@ const authDb = openAuthDb(process.env.AUTH_DB_PATH || ':memory:');
 export const registeredClients = new SqliteMap<RegisteredClient>(authDb, 'registered_clients');
 export const refreshTokens = new SqliteMap<StoredRefreshToken>(authDb, 'refresh_tokens');
 
-// Ephemeral stores (in-memory, single-use with 10-min TTL)
-export const pendingGoogleAuths = new Map<string, PendingGoogleAuth>();
-export const pendingAuthorizations = new Map<string, PendingAuthorization>();
+// Pending auth stores (SQLite-backed for blue-green deployment, single-use with 10-min TTL)
+export const pendingGoogleAuths = new SqliteMap<PendingGoogleAuth>(authDb, 'pending_google_auths');
+export const pendingAuthorizations = new SqliteMap<PendingAuthorization>(authDb, 'pending_authorizations');
 
 /**
  * Generate RFC 8414 Authorization Server Metadata.
@@ -390,14 +390,14 @@ export function cleanupExpired(): void {
   const now = Date.now();
   let cleaned = 0;
 
-  for (const [key, value] of pendingGoogleAuths) {
+  for (const [key, value] of pendingGoogleAuths.entries()) {
     if (now - value.createdAt > PENDING_AUTH_TTL_MS) {
       pendingGoogleAuths.delete(key);
       cleaned++;
     }
   }
 
-  for (const [key, value] of pendingAuthorizations) {
+  for (const [key, value] of pendingAuthorizations.entries()) {
     if (now - value.createdAt > AUTH_CODE_TTL_MS) {
       pendingAuthorizations.delete(key);
       cleaned++;

@@ -16,6 +16,14 @@ export function openAuthDb(path: string): Database.Database {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS pending_google_auths (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS pending_authorizations (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
   `);
   return db;
 }
@@ -31,6 +39,7 @@ export class SqliteMap<V> {
   private stmtDelete: Database.Statement;
   private stmtClear: Database.Statement;
   private stmtCount: Database.Statement;
+  private stmtAll: Database.Statement;
 
   constructor(
     private db: Database.Database,
@@ -48,6 +57,7 @@ export class SqliteMap<V> {
     this.stmtCount = db.prepare(
       `SELECT COUNT(*) AS cnt FROM ${tableName}`,
     );
+    this.stmtAll = db.prepare(`SELECT key, value FROM ${tableName}`);
   }
 
   get(key: string): V | undefined {
@@ -76,5 +86,10 @@ export class SqliteMap<V> {
   get size(): number {
     const row = this.stmtCount.get() as { cnt: number };
     return row.cnt;
+  }
+
+  entries(): [string, V][] {
+    const rows = this.stmtAll.all() as { key: string; value: string }[];
+    return rows.map(r => [r.key, JSON.parse(r.value) as V]);
   }
 }
