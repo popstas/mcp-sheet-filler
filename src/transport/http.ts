@@ -74,7 +74,7 @@ export async function authenticateRequest(
 
   if (!authHeader || typeof authHeader !== 'string') {
     if (sessionAuth) {
-      logger.debug('auth_fallback_to_session', { method: req.method, userId: sessionAuth.userId });
+      logger.debug('auth_fallback_to_session', { method: req.method, userId: sessionAuth.userId, userAgent: req.headers['user-agent'] });
       return sessionAuth;
     }
     logger.debug('auth_missing_header', { method: req.method, url: req.url });
@@ -192,6 +192,7 @@ export async function startHttpServer(): Promise<void> {
         method: req.method,
         userId: auth.userId,
         email: auth.email,
+        userAgent: req.headers['user-agent'],
         body: req.method === 'POST' ? req.body?.method : undefined,
       });
 
