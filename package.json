@@ -14,7 +14,8 @@
     "auth": "tsx src/index.ts auth",
     "test": "vitest",
     "test:run": "vitest run",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "docs:tools": "tsx scripts/generate-tools-docs.ts"
   },
   "keywords": [
     "mcp",

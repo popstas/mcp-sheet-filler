@@ -20,7 +20,10 @@ npm run lint         # Run ESLint
 npm test             # Run tests in watch mode (vitest)
 npm run test:run     # Run tests once
 npm test -- src/path/to/test.ts  # Run single test file
+npm run docs:tools   # Regenerate docs/tools.md after modifying tools
 ```
+
+> After adding, removing, or changing tool descriptions/schemas, run `npm run docs:tools` to regenerate `docs/tools.md`.
 
 ## Transport Modes
 

@@ -2,6 +2,8 @@
 
 MCP server for storing and safely auto-filling tabular data. Provides tools for an AI agent to read objects, identify empty auto-fill fields, collect values, and write them back — without overwriting existing data.
 
+[tools list](docs/tools.md)
+
 ![demo](assets/demo.gif)
 
 [demo sheet](https://docs.google.com/spreadsheets/d/1ksOx-MvgoLr-RZ3k-Ij6vx2InpL0C9owXkd_XSxEiyI/edit?usp=sharing)

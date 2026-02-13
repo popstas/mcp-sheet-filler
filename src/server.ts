@@ -49,7 +49,7 @@ type ToolDefinition = {
   annotations: ToolAnnotations;
 };
 
-const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
+export const TOOL_DEFINITIONS: Record<ToolName, ToolDefinition> = {
   filler_add_fields: {
     description: 'Add new fields to the schema',
     inputSchema: addFieldsSchema,
