@@ -30,6 +30,8 @@ Get objects by their names (key field values)
 **Input:**
 - `names` (array, required) — Object names (key field values)
 - `include_field_meta` (boolean, optional) — Include field metadata in response
+- `skip_filled_fields` (boolean, optional) — Skip already-filled field values from object response
+- `only_fields` (array, optional) — Only include these field names in object values (ignored when skip_filled_fields is true)
 
 ---
 
@@ -59,6 +61,7 @@ Get multiple objects that have missing auto-fill fields (batch version)
 - `limit` (number, optional) — Maximum number of objects to return
 - `include_field_meta` (boolean, optional) — Include field metadata in response
 - `skip_filled_fields` (boolean, optional) — Skip already-filled field values from object response
+- `only_fields` (array, optional) — Only include these field names in object values (ignored when skip_filled_fields is true)
 
 ---
 

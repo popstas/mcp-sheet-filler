@@ -82,7 +82,7 @@ export const handlers = {
   }) as ToolHandler<unknown, { fields: Field[] }>,
 
   filler_get_objects_by_name: (async (args, adapter) => {
-    const { names, include_field_meta } = getObjectsByNameSchema.parse(args);
+    const { names, include_field_meta, skip_filled_fields, only_fields } = getObjectsByNameSchema.parse(args);
 
     // Load all objects and fields in one call
     let allObjects: { name: string; values: Record<string, string> }[];
@@ -122,7 +122,21 @@ export const handlers = {
       });
 
       isFirst = false;
-      return { found: true as const, object: obj, missing };
+
+      let objectData;
+      if (skip_filled_fields) {
+        objectData = { name: obj.name, values: {} as Record<string, string> };
+      } else if (only_fields) {
+        const filtered: Record<string, string> = {};
+        for (const fn of only_fields) {
+          if (fn in obj.values) filtered[fn] = obj.values[fn];
+        }
+        objectData = { name: obj.name, values: filtered };
+      } else {
+        objectData = obj;
+      }
+
+      return { found: true as const, object: objectData, missing };
     });
 
     return { objects };
@@ -272,7 +286,7 @@ export const handlers = {
   >,
 
   filler_get_next_missing_fields_objects: (async (args, adapter) => {
-    const { limit, include_field_meta, skip_filled_fields } = getNextMissingFieldsObjectsSchema.parse(args);
+    const { limit, include_field_meta, skip_filled_fields, only_fields } = getNextMissingFieldsObjectsSchema.parse(args);
 
     let fields: Field[];
     let objects: { name: string; values: Record<string, string> }[];
@@ -318,9 +332,18 @@ export const handlers = {
             return { name: f.name };
           });
 
-          const objectData = skip_filled_fields
-            ? { name: obj.name, values: {} as Record<string, string> }
-            : obj;
+          let objectData;
+          if (skip_filled_fields) {
+            objectData = { name: obj.name, values: {} as Record<string, string> };
+          } else if (only_fields) {
+            const filtered: Record<string, string> = {};
+            for (const fn of only_fields) {
+              if (fn in obj.values) filtered[fn] = obj.values[fn];
+            }
+            objectData = { name: obj.name, values: filtered };
+          } else {
+            objectData = obj;
+          }
           collected.push({ object: objectData, missing });
         }
       }

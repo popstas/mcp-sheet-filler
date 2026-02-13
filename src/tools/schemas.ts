@@ -32,6 +32,15 @@ export const getObjectsByNameSchema = z.object({
     .optional()
     .default(true)
     .describe('Include field metadata in response'),
+  skip_filled_fields: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe('Skip already-filled field values from object response'),
+  only_fields: z
+    .array(z.string())
+    .optional()
+    .describe('Only include these field names in object values (ignored when skip_filled_fields is true)'),
 });
 
 export const addObjectsByNameSchema = z.object({
@@ -70,6 +79,10 @@ export const getNextMissingFieldsObjectsSchema = z.object({
     .optional()
     .default(false)
     .describe('Skip already-filled field values from object response'),
+  only_fields: z
+    .array(z.string())
+    .optional()
+    .describe('Only include these field names in object values (ignored when skip_filled_fields is true)'),
 });
 
 export const useSheetIdSchema = z.object({
