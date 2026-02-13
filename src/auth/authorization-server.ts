@@ -242,6 +242,7 @@ export function exchangeCodeForTokens(
   token_type: string;
   expires_in?: number;
   refresh_token?: string;
+  scope: string;
 } {
   const pending = pendingAuthorizations.get(params.code);
   if (!pending) {
@@ -287,10 +288,12 @@ export function exchangeCodeForTokens(
     token_type: string;
     expires_in?: number;
     refresh_token?: string;
+    scope: string;
   } = {
     access_token: pending.googleAccessToken,
     token_type: 'Bearer',
     expires_in: pending.googleExpiresIn,
+    scope: GOOGLE_SCOPES.join(' '),
   };
 
   // If Google provided a refresh token, store it and return our own opaque refresh token
@@ -323,6 +326,7 @@ export async function refreshAccessToken(
   access_token: string;
   token_type: string;
   expires_in?: number;
+  scope: string;
 }> {
   const stored = refreshTokens.get(params.refreshToken);
   if (!stored) {
@@ -375,6 +379,7 @@ export async function refreshAccessToken(
     access_token: googleTokens.access_token,
     token_type: 'Bearer',
     expires_in: googleTokens.expires_in,
+    scope: GOOGLE_SCOPES.join(' '),
   };
 }
 

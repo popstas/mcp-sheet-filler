@@ -335,6 +335,7 @@ describe('Authorization Server', () => {
       expect(tokens.token_type).toBe('Bearer');
       expect(tokens.expires_in).toBe(3600);
       expect(tokens.refresh_token).toBeTruthy();
+      expect(tokens.scope).toBe('openid email https://www.googleapis.com/auth/spreadsheets');
 
       // Code should be consumed (single-use)
       expect(pendingAuthorizations.has(ourCode)).toBe(false);
@@ -551,6 +552,7 @@ describe('Authorization Server', () => {
       expect(tokens.access_token).toBe('new-google-access-token');
       expect(tokens.token_type).toBe('Bearer');
       expect(tokens.expires_in).toBe(3600);
+      expect(tokens.scope).toBe('openid email https://www.googleapis.com/auth/spreadsheets');
 
       // Verify Google was called with correct params
       expect(fetch).toHaveBeenCalledOnce();

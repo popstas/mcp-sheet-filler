@@ -14,6 +14,16 @@ import { cleanupExpired } from '../auth/authorization-server.js';
 import { getHealthData, cleanupStaleUsers } from '../rate-limit/index.js';
 
 /**
+ * Cached auth info for a session, stored when session is created via authenticated POST.
+ * Used as fallback when subsequent requests (e.g. GET /mcp SSE) arrive without Authorization header.
+ */
+interface SessionAuth {
+  userId: string;
+  email?: string;
+  accessToken: string;
+}
+
+/**
  * Get auth configuration from environment.
  * Returns null if required config is missing.
  */
@@ -50,27 +60,37 @@ function send401(res: Response, authConfig: AuthConfig, error?: string): void {
 
 /**
  * Authenticate a request using OAuth bearer token.
+ * If the Authorization header is absent and sessionAuth is provided, falls back to cached session auth.
+ * If the header is present but invalid, always returns 401 (no fallback for bad tokens).
  * Returns the validated user info or sends 401 and returns null.
  */
-async function authenticateRequest(
+export async function authenticateRequest(
   req: Request,
   res: Response,
-  authConfig: AuthConfig
+  authConfig: AuthConfig,
+  sessionAuth?: SessionAuth
 ): Promise<{ userId: string; email?: string; accessToken: string } | null> {
   const authHeader = req.headers['authorization'];
 
   if (!authHeader || typeof authHeader !== 'string') {
+    if (sessionAuth) {
+      logger.debug('auth_fallback_to_session', { method: req.method, userId: sessionAuth.userId });
+      return sessionAuth;
+    }
+    logger.debug('auth_missing_header', { method: req.method, url: req.url });
     send401(res, authConfig, 'missing_token');
     return null;
   }
 
   if (!authHeader.startsWith('Bearer ')) {
+    logger.debug('auth_invalid_header_format', { method: req.method, url: req.url });
     send401(res, authConfig, 'invalid_request');
     return null;
   }
 
   const token = authHeader.slice(7);
   if (!token) {
+    logger.debug('auth_empty_token', { method: req.method, url: req.url });
     send401(res, authConfig, 'missing_token');
     return null;
   }
@@ -109,6 +129,9 @@ export async function startHttpServer(): Promise<void> {
 
   // Session store: session ID -> transport (only used when sessions are enabled)
   const sessions = new Map<string, StreamableHTTPServerTransport>();
+
+  // Session auth cache: session ID -> cached auth from the authenticated POST that created the session
+  const sessionAuthCache = new Map<string, SessionAuth>();
 
   const app = express();
   app.use(express.json({ limit: '100kb' }));
@@ -153,8 +176,9 @@ export async function startHttpServer(): Promise<void> {
     // Wrap entire handler in request context so all logs (including auth) get sessionId
     const ctx = { userId: '', sessionId: sessionId ?? undefined } as RequestContext;
     await requestContext.run(ctx, async () => {
-      // Authenticate the request
-      const auth = await authenticateRequest(req, res, authConfig);
+      // Authenticate the request, falling back to cached session auth if header is absent
+      const cachedAuth = sessionId ? sessionAuthCache.get(sessionId) : undefined;
+      const auth = await authenticateRequest(req, res, authConfig, cachedAuth);
       if (!auth) {
         return; // 401 already sent
       }
@@ -200,22 +224,36 @@ export async function startHttpServer(): Promise<void> {
           await sessionServer.connect(transport);
           await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
         } else if (sessionId && sessions.has(sessionId)) {
-          // Existing session: reuse transport
+          // Existing session: reuse transport, update cached auth if fresh header provided
+          if (req.headers['authorization']) {
+            sessionAuthCache.set(sessionId, {
+              userId: auth.userId,
+              email: auth.email,
+              accessToken: auth.accessToken,
+            });
+          }
           const transport = sessions.get(sessionId)!;
           await transport.handleRequest(req, res, req.method === 'POST' ? req.body : undefined);
         } else if (!sessionId) {
           // New session: create transport + server, store by session ID
           const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => crypto.randomUUID(),
-            onsessioninitialized: (sessionId) => {
-              sessions.set(sessionId, transport);
-              logger.debug('session_created', { sessionId });
+            onsessioninitialized: (newSessionId) => {
+              sessions.set(newSessionId, transport);
+              // Cache auth for this session so subsequent requests (e.g. GET SSE) can use it
+              sessionAuthCache.set(newSessionId, {
+                userId: auth.userId,
+                email: auth.email,
+                accessToken: auth.accessToken,
+              });
+              logger.debug('session_created', { sessionId: newSessionId });
             },
           });
 
           transport.onclose = () => {
             if (transport.sessionId) {
               sessions.delete(transport.sessionId);
+              sessionAuthCache.delete(transport.sessionId);
               logger.debug('session_closed', { sessionId: transport.sessionId });
             }
           };
