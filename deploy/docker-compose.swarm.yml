@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  mcp-sheet-filler:
+    image: mcp-sheet-filler:latest
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 30s
+        order: start-first
+      rollback_config:
+        parallelism: 0
+    environment:
+      - TRANSPORT=http
+      - PORT=3000
+      - RESOURCE_URL=https://mcp.example.com
+      - GOOGLE_SHEET_ID=${GOOGLE_SHEET_ID}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - AUTH_DB_PATH=/data/auth.db
+    volumes:
+      - filler-data:/data
+    networks:
+      - mcp-net
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # - ./ssl:/etc/nginx/ssl:ro
+    networks:
+      - mcp-net
+    depends_on:
+      - mcp-sheet-filler
+
+volumes:
+  filler-data:
+
+networks:
+  mcp-net:
+    driver: overlay

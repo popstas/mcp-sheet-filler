@@ -10,7 +10,7 @@ import type { AuthConfig } from '../auth/types.js';
 import { generateProtectedResourceMetadata, getMetadataUrl } from '../auth/metadata.js';
 import { validateGoogleToken } from '../auth/token-validator.js';
 import { createAuthorizationServerRouter } from '../auth/authorization-server-routes.js';
-import { cleanupExpired } from '../auth/authorization-server.js';
+import { cleanupExpired, pendingAuthorizations, pendingGoogleAuths, registeredClients, refreshTokens } from '../auth/authorization-server.js';
 import { getHealthData, cleanupStaleUsers } from '../rate-limit/index.js';
 
 /**
@@ -139,7 +139,17 @@ export async function startHttpServer(): Promise<void> {
 
   // Health check endpoint (no auth required)
   app.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', ...getHealthData() });
+    res.json({
+      status: 'ok',
+      activeSessions: sessions.size,
+      auth: {
+        registeredClients: registeredClients.size,
+        refreshTokens: refreshTokens.size,
+        pendingGoogleAuths: pendingGoogleAuths.size,
+        pendingAuthorizations: pendingAuthorizations.size,
+      },
+      ...getHealthData(),
+    });
   });
 
   // Protected Resource Metadata endpoint (RFC 9728)
