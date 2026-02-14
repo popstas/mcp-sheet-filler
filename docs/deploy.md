@@ -110,18 +110,24 @@ curl https://mcp.example.com/health
 ```json
 {
   "status": "ok",
+  "instanceId": "filler-1",
   "activeSessions": 3,
   "auth": {
     "registeredClients": 5,
     "refreshTokens": 12,
     "pendingGoogleAuths": 0,
     "pendingAuthorizations": 1
-  }
+  },
+  "nowTs": 1739000000000,
+  "rateLimit": { ... }
 }
 ```
 
+- `instanceId` — container hostname (`os.hostname()`), identifies which instance produced the response. In Docker Swarm with `hostname: "filler-{{.Task.Slot}}"`, this is `filler-1`, `filler-2`, etc.
 - `activeSessions` — number of in-memory MCP sessions on this container. Key metric for deciding when to drain a container.
 - `auth.*` — counts of OAuth-related records in SQLite.
+- `nowTs` — current timestamp in epoch milliseconds, useful for detecting stale health data.
+- `rateLimit` — per-user rate limit metrics from the rate limiter.
 
 ## nginx Config Details
 
@@ -159,6 +165,46 @@ curl -X POST https://mcp.example.com/mcp \
 curl http://container1:3000/health | jq .activeSessions
 curl http://container2:3000/health | jq .activeSessions
 ```
+
+## Per-Instance Metrics Collection
+
+With multiple instances behind nginx, scraping `/health` via the public URL only hits one random instance per request. For reliable per-instance metrics (e.g. Telegraf → InfluxDB → Grafana), each instance can periodically write its health data to a JSON file on a shared volume.
+
+### Setup
+
+Set the `HEALTH_DIR` environment variable to enable health file writing. In Docker Swarm, the `hostname` template provides stable instance naming:
+
+```yaml
+# deploy/docker-compose.swarm.yml
+hostname: "filler-{{.Task.Slot}}"
+environment:
+  - HEALTH_DIR=/data/health
+volumes:
+  - filler-data:/data
+```
+
+Each instance writes to `/data/health/{hostname}.json` every 10 seconds (atomic write via temp file + rename). On shutdown, the file is cleaned up automatically.
+
+The `instanceId` field in the health JSON identifies which instance produced the data. The `nowTs` timestamp can be used to detect stale entries.
+
+### Telegraf Configuration Example
+
+```toml
+[[inputs.file]]
+  files = ["/path/to/filler-data/health/*.json"]
+  data_format = "json"
+  json_name_key = "instanceId"
+  interval = "10s"
+```
+
+Stale file handling: use the `nowTs` field (epoch ms) to filter entries older than 30s in Grafana or Telegraf processors.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HEALTH_DIR` | _(disabled)_ | Directory to write health JSON files. Only set in multi-instance deployments. |
+| `INSTANCE_SLOT` | `os.hostname()` | Override the instance identifier used in the health filename. In Docker Swarm, `hostname` template handles this automatically. |
 
 ## Scaling
 

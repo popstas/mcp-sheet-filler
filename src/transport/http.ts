@@ -1,4 +1,7 @@
 import crypto from 'node:crypto';
+import os from 'node:os';
+import fs from 'node:fs';
+import path from 'node:path';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import express, { type Request, type Response } from 'express';
 import { createAdapter, createServer } from '../server.js';
@@ -141,6 +144,7 @@ export async function startHttpServer(): Promise<void> {
   app.get('/health', (_req: Request, res: Response) => {
     res.json({
       status: 'ok',
+      instanceId: os.hostname(),
       activeSessions: sessions.size,
       auth: {
         registeredClients: registeredClients.size,
@@ -293,6 +297,54 @@ export async function startHttpServer(): Promise<void> {
     });
   });
 
+  // Periodic health file writer for multi-instance metrics collection
+  const healthDir = process.env.HEALTH_DIR;
+  let healthFileInterval: ReturnType<typeof setInterval> | undefined;
+  let healthFilePath: string | undefined;
+
+  function getHealthJson(): string {
+    return JSON.stringify({
+      status: 'ok',
+      instanceId: os.hostname(),
+      activeSessions: sessions.size,
+      auth: {
+        registeredClients: registeredClients.size,
+        refreshTokens: refreshTokens.size,
+        pendingGoogleAuths: pendingGoogleAuths.size,
+        pendingAuthorizations: pendingAuthorizations.size,
+      },
+      ...getHealthData(),
+    });
+  }
+
+  function writeHealthFile(): void {
+    if (!healthFilePath) return;
+    const tmpPath = healthFilePath + '.tmp';
+    try {
+      fs.writeFileSync(tmpPath, getHealthJson());
+      fs.renameSync(tmpPath, healthFilePath);
+    } catch (err) {
+      logger.error('health_file_write_error', {
+        path: healthFilePath,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  function removeHealthFile(): void {
+    if (!healthFilePath) return;
+    try {
+      fs.unlinkSync(healthFilePath);
+    } catch {
+      // best-effort cleanup
+    }
+    try {
+      fs.unlinkSync(healthFilePath + '.tmp');
+    } catch {
+      // best-effort cleanup
+    }
+  }
+
   const httpServer = app.listen(port, host, () => {
     logger.info('server_started', {
       transport: 'http',
@@ -307,6 +359,16 @@ export async function startHttpServer(): Promise<void> {
     console.log(`Protected Resource Metadata: ${authConfig.resourceUrl}/.well-known/oauth-protected-resource/mcp`);
     console.log(`Authorization Server Metadata: ${authConfig.resourceUrl}/.well-known/oauth-authorization-server`);
     console.log(`Client Registration: ${authConfig.resourceUrl}/auth/register`);
+
+    // Start health file writer if HEALTH_DIR is configured
+    if (healthDir) {
+      const instanceSlot = process.env.INSTANCE_SLOT || os.hostname();
+      healthFilePath = path.join(healthDir, `${instanceSlot}.json`);
+      fs.mkdirSync(healthDir, { recursive: true });
+      writeHealthFile(); // write immediately
+      healthFileInterval = setInterval(writeHealthFile, 10_000);
+      console.log(`Health file: ${healthFilePath} (every 10s)`);
+    }
   });
 
   // Graceful shutdown
@@ -314,6 +376,10 @@ export async function startHttpServer(): Promise<void> {
     console.log('\nShutting down...');
     clearInterval(cleanupInterval);
     clearInterval(metricsCleanupInterval);
+    if (healthFileInterval) {
+      clearInterval(healthFileInterval);
+      removeHealthFile();
+    }
     httpServer.close(() => {
       logger.info('server_stopped', { transport: 'http' });
       process.exit(0);

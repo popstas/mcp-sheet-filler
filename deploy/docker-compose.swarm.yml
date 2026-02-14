@@ -3,6 +3,7 @@ version: '3.8'
 services:
   mcp-sheet-filler:
     image: mcp-sheet-filler:latest
+    hostname: "filler-{{.Task.Slot}}"
     deploy:
       replicas: 2
       update_config:
@@ -19,6 +20,7 @@ services:
       - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
       - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
       - AUTH_DB_PATH=/data/auth.db
+      - HEALTH_DIR=/data/health
     volumes:
       - filler-data:/data
     networks:
