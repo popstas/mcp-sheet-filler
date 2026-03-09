@@ -9,6 +9,7 @@ import {
   exchangeCodeForTokens,
   refreshAccessToken,
   cleanupExpired,
+  isMatchingRedirectUri,
   registeredClients,
   pendingGoogleAuths,
   pendingAuthorizations,
@@ -620,6 +621,53 @@ describe('Authorization Server', () => {
           mockAuthConfig
         )
       ).rejects.toThrow('Failed to refresh token with Google');
+    });
+  });
+
+  describe('isMatchingRedirectUri', () => {
+    it('matches exact URIs', () => {
+      expect(isMatchingRedirectUri('https://app.example.com/callback', 'https://app.example.com/callback')).toBe(true);
+    });
+
+    it('allows different ports on localhost (RFC 8252)', () => {
+      expect(isMatchingRedirectUri('http://127.0.0.1:12345/callback', 'http://127.0.0.1:64542/callback')).toBe(true);
+      expect(isMatchingRedirectUri('http://localhost:12345/callback', 'http://localhost:64542/callback')).toBe(true);
+    });
+
+    it('rejects different paths on localhost', () => {
+      expect(isMatchingRedirectUri('http://127.0.0.1:12345/callback', 'http://127.0.0.1:12345/other')).toBe(false);
+    });
+
+    it('rejects different ports on non-localhost URIs (exact match)', () => {
+      expect(isMatchingRedirectUri('https://app.example.com:8080/callback', 'https://app.example.com:9090/callback')).toBe(false);
+    });
+
+    it('rejects different hostnames', () => {
+      expect(isMatchingRedirectUri('http://127.0.0.1:12345/callback', 'http://evil.com:12345/callback')).toBe(false);
+    });
+
+    it('rejects different protocols on localhost', () => {
+      expect(isMatchingRedirectUri('https://127.0.0.1:12345/callback', 'http://127.0.0.1:12345/callback')).toBe(false);
+    });
+  });
+
+  describe('createPendingGoogleAuth with localhost redirect_uri', () => {
+    it('allows localhost redirect_uri with different port than registration', () => {
+      const { clientId } = registerTestClient('http://127.0.0.1:12345/callback');
+      const { codeChallenge } = generatePkce();
+
+      const { googleAuthUrl } = createPendingGoogleAuth(
+        {
+          clientId,
+          redirectUri: 'http://127.0.0.1:64542/callback',
+          codeChallenge,
+          codeChallengeMethod: 'S256',
+          state: 'state',
+        },
+        mockAuthConfig
+      );
+
+      expect(googleAuthUrl).toContain('accounts.google.com');
     });
   });
 

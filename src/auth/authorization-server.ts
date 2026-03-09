@@ -23,6 +23,36 @@ const GOOGLE_SCOPES = [
 const AUTH_CODE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const PENDING_AUTH_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
+/**
+ * Check if a URI uses a loopback address (localhost or 127.0.0.1).
+ */
+function isLocalhostUri(uri: string): boolean {
+  try {
+    const url = new URL(uri);
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Match redirect URIs. For loopback URIs (RFC 8252), ignores port differences.
+ * For all other URIs, requires exact match.
+ */
+export function isMatchingRedirectUri(registered: string, requested: string): boolean {
+  if (registered === requested) return true;
+  if (isLocalhostUri(registered) && isLocalhostUri(requested)) {
+    try {
+      const reg = new URL(registered);
+      const req = new URL(requested);
+      return reg.protocol === req.protocol && reg.hostname === req.hostname && reg.pathname === req.pathname;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
 // Persistent stores (SQLite-backed, configurable via AUTH_DB_PATH)
 const authDb = openAuthDb(process.env.AUTH_DB_PATH || ':memory:');
 export const registeredClients = new SqliteMap<RegisteredClient>(authDb, 'registered_clients');
@@ -108,7 +138,7 @@ export function createPendingGoogleAuth(
   }
 
   // Validate redirect_uri matches registration
-  if (!client.redirectUris.includes(params.redirectUri)) {
+  if (!client.redirectUris.some(uri => isMatchingRedirectUri(uri, params.redirectUri))) {
     throw new Error('redirect_uri does not match registration');
   }
 
