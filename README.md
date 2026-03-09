@@ -225,6 +225,17 @@ Returns `{ found, objects, count, remain }` — use this to process objects one 
 | `invalid_argument` | Invalid argument provided |
 | `storage_error` | Storage operation failed |
 
+## Tested with
+
+- ChatGPT app (developer mode)
+- Claude connector (custom connector)
+- Cursor
+- Antigravity
+- VSCode
+- ClaudeClaw
+- telegram-functions-bot
+
+
 ## License
 
 ISC
